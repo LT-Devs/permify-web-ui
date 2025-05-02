@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:17.4
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: helpmeplease
+      POSTGRES_DB: permify_1
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+
+  permify:
+    image: permify/permify:latest
+    restart: always
+    ports:
+      - "9010:3476"
+      - "9011:3478"
+    volumes:
+      - ./config.yaml:/config/config.yaml
+    environment:
+      PERMIFY_DATABASE_URI: postgresql://postgres:helpmeplease@db:5432/permify_1
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.permify.loadbalancer.server.port=3476"
+      - "traefik.http.routers.permify.rule=Host(`perm.locator`)"
+      - "traefik.http.routers.permify.entrypoints=web"
+      - "traefik.docker.network=traefik-network"
+    networks:
+      - default
+      - traefik-network
+
+  permify-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "8502:8501"
+    depends_on:
+      - permify
+    environment:
+      - PERMIFY_HOST=http://permify:3476
+      - PERMIFY_GRPC_HOST=http://permify:3478
+      - PERMIFY_TENANT=t1
+    networks:
+      - default
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.permify-ui.loadbalancer.server.port=8501"
+      - "traefik.http.routers.permify-ui.rule=Host(`permify-ui.locator`)"
+      - "traefik.http.routers.permify-ui.entrypoints=web"
+      - "traefik.docker.network=traefik-network"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+  traefik-network:
+    external: true 

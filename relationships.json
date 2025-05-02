@@ -1,0 +1,37 @@
+{
+    "tuples": [
+      {
+        "entity": {
+          "type": "oodiks",
+          "id": "1"
+        },
+        "relation": "admin",
+        "subject": {
+          "type": "user",
+          "id": "1"
+        }
+      },
+      {
+        "entity": {
+          "type": "garrison",
+          "id": "1"
+        },
+        "relation": "assigned",
+        "subject": {
+          "type": "user",
+          "id": "1"
+        }
+      },
+      {
+        "entity": {
+          "type": "petitions",
+          "id": "1"
+        },
+        "relation": "reader",
+        "subject": {
+          "type": "user",
+          "id": "1"
+        }
+      }
+    ]
+  } 
