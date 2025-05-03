@@ -72,7 +72,7 @@ class UserModel(BaseModel):
                             users_dict[user_id]["groups"].append(group_id)
                     
                     # Если это связь с приложением, добавляем роль пользователю
-                    elif tuple_data.get("relation") in ["owner", "editor", "viewer"]:
+                    else:
                         app_type = entity.get("type")
                         app_id = entity.get("id")
                         role = tuple_data.get("relation")

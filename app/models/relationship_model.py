@@ -204,40 +204,30 @@ class RelationshipModel(BaseModel):
         """Проверяет разрешение."""
         tenant_id = tenant_id or self.default_tenant
         
-        # Для локальной проверки доступа сначала пытаемся использовать API
-        try:
-            # Подготавливаем данные для запроса
-            data = {
-                "metadata": {
-                    "snap_token": "",
-                    "schema_version": schema_version or "",
-                    "depth": 20
-                },
-                "entity": {"type": entity_type, "id": entity_id},
-                "permission": permission,
-                "subject": {
-                    "type": "user", 
-                    "id": user_id,
-                    "relation": ""
-                }
-            }
-            
-            endpoint = f"/v1/tenants/{tenant_id}/permissions/check"
-            success, result = self.make_api_request(endpoint, data)
-            
-            if success:
-                return True, result
-        except Exception:
-            pass  # При ошибке API продолжаем с локальной проверкой
-        
-        # В режиме локальной разработки просто возвращаем положительный результат
-        # В реальном приложении здесь должен быть логика проверки доступа на основе ролей и прав
-        return True, {
-            "can": True,
+        # Подготавливаем данные для запроса
+        data = {
             "metadata": {
-                "reason": "Local development mode - access granted by default"
+                "snap_token": "",
+                "schema_version": schema_version or "",
+                "depth": 20
+            },
+            "entity": {"type": entity_type, "id": entity_id},
+            "permission": permission,
+            "subject": {
+                "type": "user", 
+                "id": user_id,
+                "relation": ""
             }
         }
+        
+        endpoint = f"/v1/tenants/{tenant_id}/permissions/check"
+        success, result = self.make_api_request(endpoint, data)
+        
+        if success:
+            return True, result
+        
+        # В случае ошибки API возвращаем её
+        return False, result
     
     def assign_user_to_group(self, group_id: str, user_id: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Добавляет пользователя в группу (создает отношение group-member-user)."""

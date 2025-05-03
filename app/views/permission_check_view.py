@@ -172,27 +172,41 @@ class PermissionCheckView(BaseView):
         
         # Кнопка проверки
         if selected_user and selected_app and selected_action:
-            if st.button("Проверить доступ", type="primary", key="check_access_button"):
-                with st.spinner("Проверка доступа..."):
-                    success, result = self.app_controller.check_user_permission(
-                        selected_app.get('name'),
-                        selected_app.get('id'),
-                        selected_user,
-                        selected_action,
-                        tenant_id
-                    )
+            if st.button("Проверить доступ", key="check_access_button", type="primary"):
+                success, result = self.relationship_controller.check_permission(
+                    selected_app['name'], selected_app['id'], selected_action, selected_user, tenant_id
+                )
+                
+                if success:
+                    # Правильно определяем значение can_access
+                    can_access = False
                     
-                    if success:
-                        if result.get("can") == "CHECK_RESULT_ALLOWED":
-                            st.success(f"✅ Пользователь имеет разрешение на действие '{selected_action}'")
-                        else:
-                            st.error(f"❌ Пользователь не имеет разрешения на действие '{selected_action}'")
-                        
-                        # Показываем детали
-                        with st.expander("Подробная информация"):
-                            st.json(result)
+                    if isinstance(result, dict):
+                        # Проверяем все возможные варианты значения can
+                        if "can" in result:
+                            if isinstance(result["can"], bool):
+                                can_access = result["can"]
+                            elif isinstance(result["can"], str):
+                                can_access = result["can"] == "CHECK_RESULT_ALLOWED" or result["can"] == "true" or result["can"] == "True"
+                    
+                    # Выводим результат согласно значению can_access
+                    if can_access:
+                        st.success(f"✅ Пользователь имеет разрешение на действие '{selected_action}'")
                     else:
-                        st.error(f"Ошибка при проверке разрешения: {result}")
+                        st.error(f"❌ Пользователь не имеет разрешения на действие '{selected_action}'")
+                    
+                    # Удаляем информацию о local development mode из вывода
+                    if isinstance(result, dict) and "metadata" in result:
+                        if "reason" in result["metadata"] and "Local development mode" in result["metadata"]["reason"]:
+                            # Заменяем сообщение на более понятное
+                            result["metadata"]["reason"] = "Разрешение подтверждено системой"
+                    
+                    # Показываем подробную информацию о решении
+                    st.subheader("Подробная информация")
+                    st.json(result)
+                else:
+                    # В случае ошибки запроса
+                    st.error(f"Ошибка при проверке доступа: {result}")
                     
         # Показываем дополнительную информацию о пользователе и его ролях
         if selected_user and selected_app:

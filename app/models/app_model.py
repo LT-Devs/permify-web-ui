@@ -161,6 +161,7 @@ class AppModel(BaseModel):
         # Дополняем информацию из отношений
         success, relationships = self.relationship_model.get_relationships(tenant_id)
         if success:
+            # Обрабатываем отношения из Permify
             for tuple_data in relationships.get("tuples", []):
                 entity = tuple_data.get("entity", {})
                 subject = tuple_data.get("subject", {})
@@ -170,26 +171,40 @@ class AppModel(BaseModel):
                 entity_id = entity.get("id")
                 
                 # Пропускаем типы, которые не являются приложениями
-                if entity_type in ["user", "group"] or f"{entity_type}:" not in apps_dict:
+                if entity_type in ["user", "group"]:
                     continue
                 
                 # Создаем ID для этого экземпляра приложения, если его еще нет
                 app_instance_id = f"{entity_type}:{entity_id}"
                 
                 if app_instance_id not in apps_dict:
-                    # Копируем данные из шаблона
-                    template = apps_dict.get(f"{entity_type}:", {})
+                    # Проверяем, есть ли шаблон для этого типа приложения
+                    template_key = f"{entity_type}:"
+                    template = apps_dict.get(template_key, {})
+                    
+                    # Если шаблона нет, создаем базовый шаблон
+                    if not template:
+                        template = {
+                            "name": entity_type,
+                            "id": "",
+                            "display_name": entity_type.capitalize(),
+                            "actions": [],
+                            "is_template": True
+                        }
+                    
+                    # Создаем новый экземпляр приложения
                     apps_dict[app_instance_id] = {
                         "id": entity_id,
                         "name": entity_type,
                         "display_name": template.get("display_name", entity_type.capitalize()),
                         "actions": template.get("actions", []),
                         "users": [],
-                        "groups": []
+                        "groups": [],
+                        "metadata": {"custom_relations": []}
                     }
                 
-                # Добавляем пользователя с его ролью
-                if relation in ["owner", "editor", "viewer"] and subject.get("type") == "user":
+                # Добавляем пользователя с его ролью (включая стандартные и пользовательские роли)
+                if subject.get("type") == "user":
                     user_id = subject.get("id")
                     # Проверяем, есть ли уже этот пользователь в списке
                     existing_user = next((u for u in apps_dict[app_instance_id]["users"] 
@@ -200,6 +215,14 @@ class AppModel(BaseModel):
                             "user_id": user_id,
                             "role": relation
                         })
+                        
+                        # Если это пользовательская роль (не стандартная), добавляем её в список
+                        if relation not in ["owner", "editor", "viewer"] and 'metadata' in apps_dict[app_instance_id]:
+                            if 'custom_relations' not in apps_dict[app_instance_id]['metadata']:
+                                apps_dict[app_instance_id]['metadata']['custom_relations'] = []
+                            
+                            if relation not in apps_dict[app_instance_id]['metadata']['custom_relations']:
+                                apps_dict[app_instance_id]['metadata']['custom_relations'].append(relation)
                 
                 # Добавляем группу
                 elif relation == "member" and subject.get("type") == "group":
@@ -261,71 +284,8 @@ class AppModel(BaseModel):
             return False, "Ошибка при сохранении приложения в базу данных"
         
         try:
-            # Сначала получаем текущую схему
-            success, schema_result = self.schema_model.get_current_schema(tenant_id)
-            if not success:
-                return True, "Приложение сохранено в локальной БД, но не удалось получить текущую схему Permify"
-            
-            # Проверяем, есть ли уже такое приложение в схеме
-            entities_info = self.schema_model.extract_entities_info(schema_result)
-            if app_name in entities_info:
-                # Приложение уже есть в схеме, просто создаем связи
-                return True, f"Приложение {app_name} сохранено локально и уже существует в схеме Permify"
-            
-            # Создаем новую схему с добавленным приложением
-            schema_content = schema_result.get("schema_string", "")
-            if not schema_content:
-                # Создаем схему с нуля
-                schema_content = "entity user {}\n\nentity group {\n  relation member @user\n}\n"
-            
-            # Добавляем новое приложение
-            app_schema = f"\nentity {app_name} {{\n"
-            app_schema += "  relation owner @user\n"
-            app_schema += "  relation editor @user\n"
-            app_schema += "  relation viewer @user\n"
-            app_schema += "  relation member @group\n"
-            
-            # Добавляем пользовательские отношения, если они есть
-            if "custom_relations" in metadata:
-                for relation in metadata["custom_relations"]:
-                    app_schema += f"  relation {relation} @user\n"
-            
-            app_schema += "\n"
-            
-            # Добавляем действия
-            for action in actions:
-                action_name = action["name"]
-                action_rule = "owner"
-                
-                if action.get("editor_allowed", False):
-                    action_rule += " or editor"
-                if action.get("viewer_allowed", False):
-                    action_rule += " or viewer"
-                if action.get("group_allowed", False):
-                    action_rule += " or member"
-                
-                # Добавляем пользовательские отношения
-                for key, value in action.items():
-                    if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed", "group_allowed"] and value:
-                        relation = key.replace("_allowed", "")
-                        action_rule += f" or {relation}"
-                
-                app_schema += f"  action {action_name} = {action_rule}\n"
-            
-            app_schema += "}\n"
-            
-            # Объединяем схему
-            new_schema = schema_content + app_schema
-            
-            # Валидируем новую схему
-            is_valid, validation_msg = self.schema_model.validate_schema(new_schema)
-            if not is_valid:
-                return True, f"Приложение сохранено в локальной БД, но есть ошибка в схеме Permify: {validation_msg}"
-            
-            # Создаем новую схему
-            success, result = self.schema_model.create_schema(new_schema, tenant_id)
-            if not success:
-                return True, f"Приложение сохранено в локальной БД, но возникла ошибка при обновлении схемы Permify: {result}"
+            # Принудительно обновляем схему
+            self.force_rebuild_schema(tenant_id)
             
             return True, f"Приложение {app_name} успешно создано"
         except Exception as e:
@@ -337,11 +297,14 @@ class AppModel(BaseModel):
         tenant_id = tenant_id or self.default_tenant
         metadata = metadata or {}
         
-        # Загружаем текущие приложения
-        stored_apps = self._load_apps()
+        # Собираем имена действий для дальнейшего обновления схемы
+        action_names = [action["name"] for action in actions]
+        custom_relations = set()
         
         # Ищем приложение для обновления
         app_found = False
+        stored_apps = self._load_apps()
+        
         for app in stored_apps:
             if app.get('name') == app_type and app.get('id') == app_id:
                 app_found = True
@@ -354,7 +317,6 @@ class AppModel(BaseModel):
                                 for action in actions]
                 
                 # Обрабатываем пользовательские свойства действий и собираем пользовательские отношения
-                custom_relations = set()
                 if 'metadata' in app and 'custom_relations' in app['metadata']:
                     for rel in app['metadata']['custom_relations']:
                         custom_relations.add(rel)
@@ -394,104 +356,164 @@ class AppModel(BaseModel):
             return False, "Ошибка при сохранении изменений в базу данных"
         
         try:
-            # Обновляем схему в Permify
-            success, schema_result = self.schema_model.get_current_schema(tenant_id)
-            if not success:
-                return True, "Приложение обновлено в локальной БД, но не удалось получить текущую схему Permify"
-            
-            schema_content = schema_result.get("schema_string", "")
-            if not schema_content:
-                return True, "Приложение обновлено в локальной БД, но не удалось получить содержимое схемы Permify"
-            
-            # Разбираем схему на строки и находим блок приложения
-            lines = schema_content.split('\n')
-            app_start = -1
-            app_end = -1
-            
-            for i, line in enumerate(lines):
-                if line.strip() == f"entity {app_type} {{":
-                    app_start = i
-                elif app_start != -1 and line.strip() == "}":
-                    app_end = i
-                    break
-            
-            if app_start == -1 or app_end == -1:
-                return True, f"Приложение обновлено в локальной БД, но не удалось найти блок приложения {app_type} в схеме Permify"
-            
-            # Собираем новый блок для приложения
-            new_app_block = [f"entity {app_type} {{"]
-            
-            # Сохраняем отношения из текущего блока
-            relations_added = set()
-            for i in range(app_start + 1, app_end):
-                line = lines[i].strip()
-                if line.startswith("relation"):
-                    new_app_block.append(f"  {line}")
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        relations_added.add(parts[1])
-            
-            # Добавляем стандартные отношения, если их нет
-            standard_relations = {"owner @user", "editor @user", "viewer @user", "member @group"}
-            for relation in standard_relations:
-                relation_name = relation.split()[0]
-                if relation_name not in relations_added:
-                    new_app_block.append(f"  relation {relation}")
-                    relations_added.add(relation_name)
-            
-            # Добавляем пользовательские отношения из метаданных
-            if "custom_relations" in metadata:
-                for relation in metadata["custom_relations"]:
-                    if relation not in relations_added:
-                        new_app_block.append(f"  relation {relation} @user")
-                        relations_added.add(relation)
-            
-            new_app_block.append("")  # Пустая строка для отделения от действий
-            
-            # Добавляем действия
-            for action in actions:
-                action_name = action["name"]
-                action_rule = "owner"
-                
-                if action.get("editor_allowed", False):
-                    action_rule += " or editor"
-                if action.get("viewer_allowed", False):
-                    action_rule += " or viewer"
-                if action.get("group_allowed", False):
-                    action_rule += " or member"
-                
-                # Добавляем пользовательские отношения
-                for key, value in action.items():
-                    if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed", "group_allowed"]:
-                        relation = key.replace("_allowed", "")
-                        action_rule += f" or {relation}"
-                
-                new_app_block.append(f"  action {action_name} = {action_rule}")
-            
-            new_app_block.append("}")
-            
-            # Объединяем схему
-            new_lines = lines[:app_start] + new_app_block + lines[app_end+1:]
-            new_schema = "\n".join(new_lines)
-            
-            # Валидируем новую схему
-            is_valid, validation_msg = self.schema_model.validate_schema(new_schema)
-            if not is_valid:
-                return True, f"Приложение обновлено в локальной БД, но есть ошибка в схеме Permify: {validation_msg}"
-            
-            # Создаем новую схему
-            success, result = self.schema_model.create_schema(new_schema, tenant_id)
-            if not success:
-                return True, f"Приложение обновлено в локальной БД, но возникла ошибка при обновлении схемы Permify: {result}"
+            # Всегда обновляем схему после изменения приложения
+            self.force_rebuild_schema(tenant_id)
             
             return True, f"Приложение {app_type} успешно обновлено"
         except Exception as e:
-            # В случае любой ошибки, мы все равно сохранили изменения в БД
-            return True, f"Приложение обновлено в локальной БД, но возникла ошибка при работе с Permify: {str(e)}"
+            # В случае любой ошибки при обновлении схемы, мы все равно сохранили изменения в БД
+            return True, f"Приложение обновлено в локальной БД, но возникла ошибка при обновлении схемы: {str(e)}"
+
+    def update_schema_for_app(self, app_name: str, actions: List[str], custom_relations: List[str], tenant_id: str = None) -> Tuple[bool, str]:
+        """Обновляет схему с новыми действиями и отношениями для приложения."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Получаем текущую схему
+        success, schema_result = self.schema_model.get_current_schema(tenant_id)
+        if not success:
+            return False, f"Не удалось получить схему: {schema_result}"
+        
+        # Проверяем, есть ли сущность для приложения в схеме
+        entity_definitions = schema_result.get("schema", {}).get("entity_definitions", {})
+        app_entity = entity_definitions.get(app_name, {})
+        
+        # Если сущности нет, создаем новую схему
+        if not app_entity:
+            schema_string = schema_result.get("schema_string", "")
+            new_entity = f"\nentity {app_name} {{\n"
+            new_entity += "  relation owner @user\n"
+            new_entity += "  relation editor @user\n"
+            new_entity += "  relation viewer @user\n"
+            new_entity += "  relation member @group\n"
+            
+            # Добавляем пользовательские отношения
+            for relation in custom_relations:
+                new_entity += f"  relation {relation} @user\n"
+            
+            new_entity += "\n"
+            
+            # Добавляем действия
+            for action in actions:
+                rule = "owner"
+                if action in ["view", "read"]:
+                    rule = "owner or editor or viewer"
+                elif action in ["edit", "update"]:
+                    rule = "owner or editor"
+                
+                # Если это действие export и есть роль exporter, добавляем её
+                if action == "export" and "exporter" in custom_relations:
+                    rule += " or exporter"
+                
+                new_entity += f"  action {action} = {rule}\n"
+            
+            new_entity += "}\n"
+            
+            # Добавляем новую сущность в схему
+            updated_schema = schema_string + new_entity
+            
+            # Создаем новую схему
+            return self.schema_model.create_schema(updated_schema, tenant_id)
+        
+        # Если сущность уже есть, обновляем её
+        schema_string = schema_result.get("schema_string", "")
+        if not schema_string:
+            return False, "Не удалось получить строковое представление схемы"
+        
+        # Разбиваем схему на строки
+        lines = schema_string.split('\n')
+        entity_start = -1
+        entity_end = -1
+        
+        # Ищем блок сущности
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            if line_stripped == f"entity {app_name} {{":
+                entity_start = i
+            elif entity_start != -1 and line_stripped == "}":
+                entity_end = i
+                break
+        
+        if entity_start == -1 or entity_end == -1:
+            return False, f"Не удалось найти блок сущности {app_name} в схеме"
+        
+        # Формируем список текущих отношений и действий
+        current_relations = set()
+        current_actions = set()
+        
+        for i in range(entity_start + 1, entity_end):
+            line = lines[i].strip()
+            if line.startswith("relation"):
+                parts = line.split()
+                if len(parts) > 1:
+                    relation = parts[1]
+                    current_relations.add(relation)
+            elif line.startswith("action"):
+                parts = line.split()
+                if len(parts) > 1:
+                    action = parts[1]
+                    current_actions.add(action)
+        
+        # Обновляем схему с новыми отношениями
+        insert_index = entity_start + 1
+        for relation in custom_relations:
+            if relation not in current_relations:
+                indentation = "  "  # Стандартный отступ в схеме
+                new_relation_line = f"{indentation}relation {relation} @user"
+                lines.insert(insert_index, new_relation_line)
+                insert_index += 1
+                entity_end += 1  # Увеличиваем индекс конца сущности
+        
+        # Обновляем схему с новыми действиями
+        for action in actions:
+            if action not in current_actions:
+                rule = "owner"
+                if action in ["view", "read"]:
+                    rule = "owner or editor or viewer"
+                elif action in ["edit", "update"]:
+                    rule = "owner or editor"
+                
+                # Если это действие export и есть роль exporter, добавляем её
+                if action == "export" and "exporter" in custom_relations:
+                    rule += " or exporter"
+                
+                indentation = "  "  # Стандартный отступ в схеме
+                new_action_line = f"{indentation}action {action} = {rule}"
+                lines.insert(entity_end, new_action_line)
+                entity_end += 1  # Увеличиваем индекс конца сущности
+        
+        # Собираем обновленную схему
+        updated_schema = '\n'.join(lines)
+        
+        # Создаем новую схему
+        success, result = self.schema_model.create_schema(updated_schema, tenant_id)
+        if success:
+            return True, "Схема успешно обновлена"
+        else:
+            return False, f"Ошибка при обновлении схемы: {result}"
     
     def assign_user_to_app(self, app_name: str, app_id: str, user_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Назначает пользователю роль в приложении."""
-        return self.relationship_model.assign_user_to_app(app_name, app_id, user_id, role, tenant_id)
+        success, result = self.relationship_model.assign_user_to_app(app_name, app_id, user_id, role, tenant_id)
+        
+        if success:
+            # Для любой роли (стандартной или пользовательской) обновляем схему
+            # Это гарантирует, что схема всегда будет актуальной
+            tenant_id = tenant_id or self.default_tenant
+            self.force_rebuild_schema(tenant_id)
+        
+        return success, result
+
+    def update_schema_with_custom_role(self, app_name: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Обновляет схему с новой пользовательской ролью."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Используем новый API для обновления схемы
+        return self.schema_model.update_schema_for_role(app_name, role, tenant_id)
+    
+    def force_rebuild_schema(self, tenant_id: str = None) -> Tuple[bool, str]:
+        """Принудительно пересоздает схему на основе текущих данных."""
+        tenant_id = tenant_id or self.default_tenant
+        return self.schema_model.generate_and_apply_schema(tenant_id)
     
     def remove_user_from_app(self, app_name: str, app_id: str, user_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Удаляет роль пользователя в приложении."""

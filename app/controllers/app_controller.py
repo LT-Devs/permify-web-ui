@@ -1,6 +1,6 @@
 from .base_controller import BaseController
 from app.models import AppModel
-from typing import Tuple, Dict, List, Any
+from typing import Tuple, Dict, List, Any, Optional, Union
 
 class AppController(BaseController):
     """Контроллер для управления приложениями в упрощенном интерфейсе."""
@@ -48,3 +48,7 @@ class AppController(BaseController):
     def get_all_custom_relations(self) -> List[str]:
         """Возвращает список всех пользовательских типов отношений из всех приложений."""
         return self.app_model.get_all_custom_relations()
+    
+    def force_rebuild_schema(self, tenant_id: str = None) -> Tuple[bool, str]:
+        """Принудительно пересоздает схему на основе текущих данных."""
+        return self.app_model.force_rebuild_schema(tenant_id)

@@ -1,28 +1,3 @@
 {
-  "tuples": [
-    {
-      "entity": {
-        "type": "Glupec",
-        "id": "5"
-      },
-      "relation": "exporters",
-      "subject": {
-        "type": "user",
-        "id": "5",
-        "relation": ""
-      }
-    },
-    {
-      "entity": {
-        "type": "Glupec",
-        "id": "5"
-      },
-      "relation": "Tester",
-      "subject": {
-        "type": "user",
-        "id": "5",
-        "relation": ""
-      }
-    }
-  ]
+  "tuples": []
 }

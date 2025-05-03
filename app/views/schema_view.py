@@ -3,7 +3,7 @@ import pandas as pd
 import os
 from pathlib import Path
 from .base_view import BaseView
-from app.controllers import SchemaController
+from app.controllers import SchemaController, AppController
 
 class SchemaView(BaseView):
     """Представление для управления схемами в ручном режиме."""
@@ -11,6 +11,7 @@ class SchemaView(BaseView):
     def __init__(self):
         super().__init__()
         self.controller = SchemaController()
+        self.app_controller = AppController()
     
     def server_file_selector(self, folder_path='.', extensions=None):
         """Выбор файлов на сервере."""
@@ -51,184 +52,159 @@ class SchemaView(BaseView):
         
         tenant_id = self.get_tenant_id("schema_view")
         
-        # Показываем все версии схем
+        tabs = st.tabs(["Текущая схема", "Создание схемы", "Версии схем", "Обновление схемы"])
+        
+        with tabs[0]:
+            self.show_current_schema(tenant_id)
+        
+        with tabs[1]:
+            self.show_schema_editor(tenant_id)
+        
+        with tabs[2]:
+            self.show_schema_versions(tenant_id)
+            
+        with tabs[3]:
+            self.show_schema_update_tools(tenant_id)
+            
+    def show_schema_update_tools(self, tenant_id: str):
+        """Отображает инструменты для обновления схемы."""
+        st.subheader("Инструменты обновления схемы")
+        
+        st.info("Данный раздел позволяет принудительно обновить схему на основе имеющихся данных об объектах, ролях и разрешениях.")
+        
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            st.info("При нажатии на кнопку будет сгенерирована новая схема на основе всех имеющихся данных о приложениях, ролях и разрешениях.")
+        
+        with col2:
+            if st.button("🔄 Пересоздать схему", type="primary", key="rebuild_schema_button"):
+                with st.spinner("Обновление схемы..."):
+                    success, result = self.app_controller.force_rebuild_schema(tenant_id)
+                    
+                    if success:
+                        st.success("✅ Схема успешно обновлена!")
+                    else:
+                        st.error(f"❌ Ошибка при обновлении схемы: {result}")
+    
+    def show_current_schema(self, tenant_id: str):
+        """Отображает текущую схему."""
+        st.subheader("Текущая схема")
+        
+        success, schema_result = self.controller.get_current_schema(tenant_id)
+        
+        if success:
+            st.info(f"Версия схемы: {schema_result.get('version', 'Неизвестно')}")
+            
+            if "schema_string" in schema_result:
+                st.code(schema_result["schema_string"], language="perm")
+            else:
+                st.json(schema_result)
+        else:
+            st.error(f"Ошибка получения схемы: {schema_result}")
+    
+    def show_schema_editor(self, tenant_id: str):
+        """Отображает редактор схемы."""
+        st.subheader("Создание новой схемы")
+        
+        # Загружаем текущую схему как образец
+        success, schema_result = self.controller.get_current_schema(tenant_id)
+        
+        if success and "schema_string" in schema_result:
+            default_schema = schema_result["schema_string"]
+        else:
+            default_schema = """entity user {}
+
+entity group {
+  relation member @user
+}
+
+entity document {
+  relation owner @user
+  relation editor @user
+  relation viewer @user
+  relation member @group
+  
+  action view = owner or editor or viewer or member
+  action edit = owner or editor
+  action delete = owner
+}
+"""
+        
+        schema_content = st.text_area("Содержимое схемы", 
+                                    value=default_schema, 
+                                    height=400,
+                                    key="schema_editor")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            if st.button("Проверить схему", key="validate_schema_button"):
+                with st.spinner("Проверка схемы..."):
+                    success, result = self.controller.validate_schema(schema_content)
+                    
+                    if success:
+                        st.success("✅ Схема валидна")
+                    else:
+                        st.error(f"❌ Ошибка в схеме: {result}")
+        
+        with col2:
+            if st.button("Создать схему", key="create_schema_button", type="primary"):
+                with st.spinner("Создание схемы..."):
+                    success, result = self.controller.create_schema(schema_content, tenant_id)
+                    
+                    if success:
+                        st.success("✅ Схема успешно создана")
+                    else:
+                        st.error(f"❌ Ошибка при создании схемы: {result}")
+    
+    def show_schema_versions(self, tenant_id: str):
+        """Отображает список версий схем."""
         st.subheader("Версии схем")
         
-        if st.button("Получить все версии схем"):
-            try:
-                # Получаем список всех схем
-                success, schemas_result = self.controller.get_schema_list(tenant_id)
-                if not success:
-                    st.error(f"Ошибка получения списка схем: {schemas_result}")
-                else:
-                    schemas_list = schemas_result
-                    
-                    # Проверяем, есть ли схемы в списке
-                    if not schemas_list.get("schemas") or len(schemas_list["schemas"]) == 0:
-                        st.warning("Нет доступных схем. Сначала создайте схему.")
-                    else:
-                        # Сортируем схемы по дате создания, чтобы самая новая была первой
-                        sorted_schemas = sorted(schemas_list['schemas'], 
-                                               key=lambda x: x.get('created_at', ''), 
-                                               reverse=True)
-                        
-                        # Отображаем карточки схем
-                        st.write(f"Найдено версий схем: {len(sorted_schemas)}")
-                        
-                        # Показываем информацию о последней версии
-                        st.success(f"Последняя версия схемы: {sorted_schemas[0]['version']} (создана: {sorted_schemas[0]['created_at']})")
-                        
-                        # Создаем таблицу для версий схем
-                        schema_data = []
-                        for schema in sorted_schemas:
-                            schema_data.append({
-                                "Версия": schema.get("version", ""),
-                                "Дата создания": schema.get("created_at", ""),
-                            })
-                        
-                        # Отображаем таблицу версий
-                        st.table(pd.DataFrame(schema_data))
-                        
-                        # Создаем вкладки для отображения схем
-                        for i, schema in enumerate(sorted_schemas):
-                            with st.expander(f"Схема версии {schema['version']} (создана: {schema['created_at']})"):
-                                # Создаем кнопку для просмотра этой версии схемы
-                                schema_version = schema['version']
-                                if st.button(f"Просмотреть", key=f"view_schema_{schema_version}"):
-                                    try:
-                                        # Получаем детальную информацию о схеме
-                                        success, schema_result = self.controller.get_current_schema(tenant_id, schema_version)
-                                        
-                                        if success:
-                                            st.json(schema_result)
-                                            
-                                            # Если есть данные о схеме, попробуем отобразить их в более читаемом виде
-                                            if 'schema' in schema_result:
-                                                st.subheader("Содержимое схемы:")
-                                                if 'entityDefinitions' in schema_result['schema']:
-                                                    entities = schema_result['schema']['entityDefinitions']
-                                                    entity_data = []
-                                                    for entity_name, entity_def in entities.items():
-                                                        permissions = list(entity_def.get('permissions', {}).keys())
-                                                        relations = list(entity_def.get('relations', {}).keys())
-                                                        entity_data.append({
-                                                            "Сущность": entity_name,
-                                                            "Отношения": ", ".join(relations) if relations else "-",
-                                                            "Разрешения": ", ".join(permissions) if permissions else "-"
-                                                        })
-                                                    
-                                                    if entity_data:
-                                                        st.table(pd.DataFrame(entity_data))
-                                        else:
-                                            st.error(f"Ошибка при получении схемы {schema_version}: {schema_result}")
-                                    except Exception as e:
-                                        st.error(f"Ошибка при просмотре схемы: {str(e)}")
-            except Exception as e:
-                st.error(f"Ошибка: {str(e)}")
+        success, schema_result = self.controller.get_schema_list(tenant_id)
         
-        # Показываем текущую (последнюю) схему
-        st.subheader("Текущая схема")
-        if st.button("Получить текущую схему"):
-            success, result = self.controller.get_current_schema(tenant_id)
-            if success:
-                st.json(result)
+        if success:
+            schemas = schema_result.get("schemas", [])
+            
+            if not schemas:
+                st.info("Нет доступных схем")
+                return
+            
+            # Сортируем схемы по дате создания (новые сначала)
+            sorted_schemas = sorted(schemas, key=lambda x: x.get('created_at', ''), reverse=True)
+            
+            # Создаем DataFrame для отображения
+            schemas_data = []
+            for schema in sorted_schemas:
+                schemas_data.append({
+                    "Версия": schema.get("version", ""),
+                    "Дата создания": schema.get("created_at", "")
+                })
+            
+            st.dataframe(
+                pd.DataFrame(schemas_data),
+                use_container_width=True,
+                hide_index=True
+            )
+            
+            # Выбор версии для просмотра
+            versions = [schema.get("version") for schema in sorted_schemas]
+            selected_version = st.selectbox(
+                "Выберите версию для просмотра",
+                versions,
+                key="select_schema_version"
+            )
+            
+            if selected_version:
+                success, schema_result = self.controller.get_current_schema(tenant_id, selected_version)
                 
-                # Если есть данные о схеме, отображаем их в более читаемом виде
-                if 'schema' in result:
-                    st.subheader("Сущности в схеме:")
-                    if 'entityDefinitions' in result['schema']:
-                        for entity_name, entity_def in result['schema']['entityDefinitions'].items():
-                            st.write(f"- {entity_name}")
-                            
-                            # Показываем отношения для этой сущности
-                            if 'relations' in entity_def:
-                                st.write(f"  Отношения:")
-                                for relation_name, relation_def in entity_def['relations'].items():
-                                    st.write(f"  - {relation_name}")
-                            
-                            # Показываем разрешения для этой сущности
-                            if 'permissions' in entity_def:
-                                st.write(f"  Разрешения:")
-                                for perm_name in entity_def['permissions'].keys():
-                                    st.write(f"  - {perm_name}")
-            else:
-                st.error(result)
-        
-        # Загрузка схемы
-        st.subheader("Загрузка схемы")
-        
-        upload_type = st.radio(
-            "Способ загрузки схемы",
-            ["Загрузить файл с компьютера", "Выбрать файл на сервере", "Ввести схему вручную"]
-        )
-        
-        if upload_type == "Загрузить файл с компьютера":
-            uploaded_file = st.file_uploader("Выберите файл схемы", type=["perm"], accept_multiple_files=False)
-            
-            if uploaded_file is not None:
-                # Чтение содержимого файла
-                schema_content = uploaded_file.getvalue().decode("utf-8")
-                st.code(schema_content, language="perm")
-                
-                # Валидация схемы
-                is_valid, validation_msg = self.controller.validate_schema(schema_content)
-                if is_valid:
-                    st.success("✅ Схема валидна")
-                    if st.button("Создать схему в Permify"):
-                        success, message = self.controller.create_schema(schema_content, tenant_id)
-                        if success:
-                            st.success(message)
-                        else:
-                            st.error(message)
+                if success and "schema_string" in schema_result:
+                    st.subheader(f"Схема версии {selected_version}")
+                    st.code(schema_result["schema_string"], language="perm")
+                elif success:
+                    st.json(schema_result)
                 else:
-                    st.error(f"❌ {validation_msg}")
-        
-        elif upload_type == "Выбрать файл на сервере":
-            # Опция выбора директории
-            base_dir = st.text_input("Базовая директория", value=".")
-            schema_file = self.server_file_selector(base_dir, extensions=["perm"])
-            
-            if schema_file:
-                schema_content = self.load_schema_from_file(schema_file)
-                if schema_content:
-                    st.code(schema_content, language="perm")
-                    
-                    # Валидация схемы
-                    is_valid, validation_msg = self.controller.validate_schema(schema_content)
-                    if is_valid:
-                        st.success("✅ Схема валидна")
-                        if st.button("Создать схему в Permify"):
-                            success, message = self.controller.create_schema(schema_content, tenant_id)
-                            if success:
-                                st.success(message)
-                            else:
-                                st.error(message)
-                    else:
-                        st.error(f"❌ {validation_msg}")
-        
-        elif upload_type == "Ввести схему вручную":
-            manual_schema = st.text_area("Введите схему вручную", height=300)
-            
-            if manual_schema:
-                # Кнопка для валидации схемы
-                if st.button("Валидировать схему"):
-                    is_valid, validation_msg = self.controller.validate_schema(manual_schema)
-                    if is_valid:
-                        st.success("✅ Схема валидна")
-                    else:
-                        st.error(f"❌ {validation_msg}")
-            
-                if st.button("Создать схему из текста"):
-                    if manual_schema:
-                        # Сначала валидируем
-                        is_valid, validation_msg = self.controller.validate_schema(manual_schema)
-                        if is_valid:
-                            success, message = self.controller.create_schema(manual_schema, tenant_id)
-                            if success:
-                                st.success(message)
-                            else:
-                                st.error(message)
-                        else:
-                            st.error(f"❌ {validation_msg}")
-                    else:
-                        st.warning("Введите схему перед созданием") 
+                    st.error(f"Ошибка получения схемы: {schema_result}")
+        else:
+            st.error(f"Ошибка получения списка схем: {schema_result}") 

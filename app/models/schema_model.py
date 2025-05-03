@@ -16,10 +16,17 @@ class SchemaModel(BaseModel):
             "continuous_token": ""
         }
         
-        return self.make_api_request(endpoint, data)
+        success, result = self.make_api_request(endpoint, data)
+        
+        # Обработка случая, когда схема не найдена (404)
+        if not success and "ERROR_CODE_SCHEMA_NOT_FOUND" in str(result):
+            # Возвращаем пустой список схем вместо ошибки
+            return True, {"schemas": []}
+        
+        return success, result
     
     def get_current_schema(self, tenant_id: str = None, schema_version: str = None) -> Tuple[bool, Any]:
-        """Получает текущую или указанную версию схемы."""
+        """Получает текущую или указанную версию схемы. Создает схему, если она не существует."""
         tenant_id = tenant_id or self.default_tenant
         
         # Сначала получаем список схем
@@ -31,7 +38,8 @@ class SchemaModel(BaseModel):
         
         # Проверяем, есть ли схемы в списке
         if not schemas_list.get("schemas") or len(schemas_list["schemas"]) == 0:
-            return False, "Нет доступных схем"
+            # Если схемы нет, создаем новую на основе существующих данных
+            return self.create_default_schema(tenant_id)
         
         # Сортируем схемы по дате создания (новые сначала)
         sorted_schemas = sorted(schemas_list["schemas"], 
@@ -73,6 +81,86 @@ class SchemaModel(BaseModel):
         schema_result["available_versions"] = [{"version": s["version"], "created_at": s["created_at"]} for s in sorted_schemas]
         
         return True, schema_result
+    
+    def create_default_schema(self, tenant_id: str = None) -> Tuple[bool, Any]:
+        """Создает схему по умолчанию на основе существующих данных."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Загружаем отношения для анализа
+        from .relationship_model import RelationshipModel
+        relationship_model = RelationshipModel()
+        success, relationships = relationship_model.get_relationships(tenant_id)
+        
+        if not success:
+            return False, f"Не удалось получить отношения для создания схемы: {relationships}"
+        
+        # Анализируем отношения и создаем словарь сущностей
+        entities = {}
+        relations = {}
+        
+        # Добавляем базовые сущности
+        entities["user"] = {"relations": [], "actions": []}
+        
+        # Собираем информацию из отношений
+        for tuple_data in relationships.get("tuples", []):
+            entity = tuple_data.get("entity", {})
+            relation = tuple_data.get("relation", "")
+            subject = tuple_data.get("subject", {})
+            
+            entity_type = entity.get("type")
+            subject_type = subject.get("type")
+            
+            # Добавляем сущности, если их еще нет
+            if entity_type not in entities:
+                entities[entity_type] = {"relations": [], "actions": []}
+            
+            if subject_type not in entities:
+                entities[subject_type] = {"relations": [], "actions": []}
+            
+            # Добавляем отношение, если его еще нет
+            relation_key = f"{entity_type}_{relation}"
+            if relation_key not in relations:
+                relations[relation_key] = True
+                # Добавляем отношение к сущности
+                if relation not in entities[entity_type]["relations"]:
+                    entities[entity_type]["relations"].append(relation)
+        
+        # Создаем схему на основе собранной информации
+        schema_content = "// Автоматически сгенерированная схема\n\n"
+        
+        # Добавляем сущность пользователя
+        schema_content += "entity user {}\n\n"
+        
+        # Добавляем остальные сущности
+        for entity_name, entity_data in entities.items():
+            if entity_name == "user":
+                continue
+                
+            schema_content += f"entity {entity_name} {{\n"
+            
+            # Добавляем отношения
+            for relation in entity_data["relations"]:
+                schema_content += f"  relation {relation} @user\n"
+            
+            # Добавляем стандартные действия
+            standard_actions = ["view", "edit", "create", "delete"]
+            for action in standard_actions:
+                if len(entity_data["relations"]) > 0:
+                    # Используем первое отношение как стандартное для действий
+                    first_relation = entity_data["relations"][0]
+                    schema_content += f"  action {action} = {first_relation}\n"
+            
+            schema_content += "}\n\n"
+        
+        # Создаем схему
+        success, result = self.create_schema(schema_content, tenant_id)
+        
+        if success:
+            print(f"Схема успешно создана для tenant_id {tenant_id}")
+            # Получаем созданную схему для возврата
+            return self.get_current_schema(tenant_id)
+        else:
+            return False, f"Ошибка при создании схемы: {result}"
     
     def create_schema(self, schema_content: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Создает новую схему."""
@@ -205,4 +293,114 @@ class SchemaModel(BaseModel):
             app_lines.append("}")
             schema_lines.append("\n".join(app_lines))
         
-        return "\n".join(schema_lines) 
+        return "\n".join(schema_lines)
+
+    def generate_and_apply_schema(self, tenant_id: str = None) -> Tuple[bool, Any]:
+        """Генерирует и применяет схему на основе текущих данных приложений и ролей."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        try:
+            # Загружаем данные приложений из модели приложений
+            from .app_model import AppModel
+            app_model = AppModel()
+            apps = app_model.get_apps(tenant_id)
+            
+            # Загружаем данные групп
+            from .group_model import GroupModel
+            group_model = GroupModel()
+            groups = group_model.get_groups(tenant_id)
+            
+            # Преобразуем список групп в словарь для удобства
+            groups_dict = {group.get('id'): group for group in groups}
+            
+            # Генерируем новую схему
+            schema_content = "// Автоматически сгенерированная схема\n\n"
+            
+            # Добавляем базовые сущности
+            schema_content += "entity user {}\n\n"
+            schema_content += "entity group {\n  relation member @user\n}\n\n"
+            
+            # Добавляем приложения
+            for app in apps:
+                if app.get('is_template', False):
+                    continue  # Пропускаем шаблоны
+                
+                app_name = app.get('name')
+                app_id = app.get('id')
+                if not app_name or not app_id:
+                    continue
+                
+                schema_content += f"entity {app_name} {{\n"
+                
+                # Добавляем стандартные отношения
+                schema_content += "  relation owner @user\n"
+                schema_content += "  relation editor @user\n"
+                schema_content += "  relation viewer @user\n"
+                schema_content += "  relation member @group\n"
+                
+                # Добавляем пользовательские отношения
+                custom_relations = app.get('metadata', {}).get('custom_relations', [])
+                for relation in custom_relations:
+                    schema_content += f"  relation {relation} @user\n"
+                
+                # Пустая строка между отношениями и действиями
+                schema_content += "\n"
+                
+                # Собираем правила для действий
+                for action in app.get('actions', []):
+                    action_name = action.get('name')
+                    if not action_name:
+                        continue
+                    
+                    # Формируем правило для действия
+                    rule_parts = ["owner"]  # владелец всегда имеет все права
+                    
+                    # Добавляем стандартные роли
+                    if action.get('editor_allowed', False):
+                        rule_parts.append("editor")
+                    if action.get('viewer_allowed', False):
+                        rule_parts.append("viewer")
+                    if action.get('group_allowed', False):
+                        rule_parts.append("member")
+                    
+                    # Добавляем пользовательские роли
+                    for key, value in action.items():
+                        if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed", "group_allowed"] and value:
+                            relation = key.replace("_allowed", "")
+                            if relation in custom_relations:
+                                rule_parts.append(relation)
+                    
+                    # Объединяем части правила с "or"
+                    rule = " or ".join(rule_parts)
+                    schema_content += f"  action {action_name} = {rule}\n"
+                
+                # Закрываем блок приложения
+                schema_content += "}\n\n"
+            
+            # Удаляем последнюю пустую строку, если нужно
+            schema_content = schema_content.rstrip() + "\n"
+            
+            # Валидируем схему перед применением
+            is_valid, validation_msg = self.validate_schema(schema_content)
+            if not is_valid:
+                return False, f"Ошибка валидации схемы: {validation_msg}"
+            
+            # Применяем новую схему
+            success, result = self.create_schema(schema_content, tenant_id)
+            if not success:
+                return False, f"Ошибка при создании схемы: {result}"
+            
+            return True, "Схема успешно создана и применена"
+        
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Ошибка при генерации и применении схемы: {str(e)}\n{error_details}")
+            return False, f"Ошибка при генерации и применении схемы: {str(e)}"
+
+    def update_schema_for_role(self, app_name: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Обновляет схему для добавления новой роли, более надежный метод."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Вместо поиска в существующей схеме, генерируем новую
+        return self.generate_and_apply_schema(tenant_id) 

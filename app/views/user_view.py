@@ -165,10 +165,18 @@ class UserView(BaseView):
                                 app_id = role.get('app_id')
                                 role_name = role.get('role')
                                 
+                                # Преобразуем стандартные роли в удобочитаемый формат
+                                standard_roles = {
+                                    "owner": "👑 Владелец (полный доступ)",
+                                    "editor": "✏️ Редактор",
+                                    "viewer": "👁️ Просмотрщик"
+                                }
+                                display_role = standard_roles.get(role_name, f"🔧 {role_name.capitalize()}")
+                                
                                 col_a, col_b = st.columns([4, 1])
                                 with col_a:
                                     app_display = next((app.get('display_name', app.get('name')) for app in apps if app.get('name') == app_type and app.get('id') == app_id), f"{app_type}")
-                                    st.write(f"- {app_display} (ID: {app_id}): **{role_name}**")
+                                    st.write(f"- {app_display} (ID: {app_id}): **{display_role}**")
                                 with col_b:
                                     if st.button("Удалить", key=f"remove_role_{selected_user_id}_{app_type}_{app_id}_{role_name}"):
                                         success, message = self.controller.remove_app_role(
