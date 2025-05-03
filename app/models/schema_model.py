@@ -78,6 +78,10 @@ class SchemaModel(BaseModel):
         """Создает новую схему."""
         tenant_id = tenant_id or self.default_tenant
         
+        # Отладочный вывод
+        print(f"Создание схемы для tenant_id {tenant_id}:")
+        print(f"Схема: {schema_content}")
+        
         endpoint = f"/v1/tenants/{tenant_id}/schemas/write"
         data = {
             "schema": schema_content
@@ -87,6 +91,7 @@ class SchemaModel(BaseModel):
         if success:
             return True, "Схема успешно создана"
         else:
+            print(f"Ошибка создания схемы: {result}")
             return False, result
     
     def validate_schema(self, schema_content: str) -> Tuple[bool, str]:

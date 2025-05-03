@@ -1,6 +1,8 @@
 from .base_model import BaseModel
 from .relationship_model import RelationshipModel
 from typing import Dict, Any, List, Optional, Tuple, Union
+import os
+import json
 
 class UserModel(BaseModel):
     """Модель для управления пользователями в упрощенном интерфейсе."""
@@ -8,64 +10,160 @@ class UserModel(BaseModel):
     def __init__(self):
         super().__init__()
         self.relationship_model = RelationshipModel()
-    
-    def get_users(self, tenant_id: str = None) -> List[Dict[str, Any]]:
-        """Получает список пользователей на основе связей в системе."""
-        tenant_id = tenant_id or self.default_tenant
+        self.users_file = os.path.join(os.getcwd(), 'data', 'users.json')
         
-        # Получаем все отношения
-        success, relationships = self.relationship_model.get_relationships(tenant_id)
-        if not success:
+        # Создаем директорию data, если она не существует
+        os.makedirs(os.path.dirname(self.users_file), exist_ok=True)
+    
+    def _load_users(self) -> List[Dict[str, Any]]:
+        """Загружает список пользователей из файла."""
+        if not os.path.exists(self.users_file):
             return []
         
-        # Извлекаем всех уникальных пользователей
-        users = {}
+        try:
+            with open(self.users_file, 'r') as f:
+                return json.load(f).get('users', [])
+        except (json.JSONDecodeError, FileNotFoundError):
+            return []
+    
+    def _save_users(self, users: List[Dict[str, Any]]) -> bool:
+        """Сохраняет список пользователей в файл."""
+        try:
+            with open(self.users_file, 'w') as f:
+                json.dump({'users': users}, f, indent=2)
+            return True
+        except Exception as e:
+            print(f"Ошибка при сохранении пользователей: {str(e)}")
+            return False
+    
+    def get_users(self, tenant_id: str = None) -> List[Dict[str, Any]]:
+        """Получает список пользователей из хранилища и дополняет данными из отношений."""
+        tenant_id = tenant_id or self.default_tenant
         
-        for tuple_data in relationships.get("tuples", []):
-            subject = tuple_data.get("subject", {})
-            entity = tuple_data.get("entity", {})
-            
-            # Добавляем пользователей из субъектов
-            if subject.get("type") == "user":
-                user_id = subject.get("id")
-                if user_id not in users:
-                    users[user_id] = {
-                        "id": user_id,
-                        "name": f"Пользователь {user_id}",
-                        "groups": [],
-                        "app_roles": []
-                    }
+        # Загружаем пользователей из файла
+        stored_users = self._load_users()
+        users_dict = {user.get('id'): user for user in stored_users}
+        
+        # Получаем информацию из отношений
+        success, relationships = self.relationship_model.get_relationships(tenant_id)
+        
+        if success:
+            for tuple_data in relationships.get("tuples", []):
+                subject = tuple_data.get("subject", {})
+                entity = tuple_data.get("entity", {})
                 
-                # Если это связь с группой, добавляем группу пользователю
-                if entity.get("type") == "group" and tuple_data.get("relation") == "member":
-                    group_id = entity.get("id")
-                    if group_id not in users[user_id]["groups"]:
-                        users[user_id]["groups"].append(group_id)
-                
-                # Если это связь с приложением, добавляем роль пользователю
-                elif tuple_data.get("relation") in ["owner", "editor", "viewer"]:
-                    app_type = entity.get("type")
-                    app_id = entity.get("id")
-                    role = tuple_data.get("relation")
+                # Добавляем пользователей из субъектов
+                if subject.get("type") == "user":
+                    user_id = subject.get("id")
+                    if user_id not in users_dict:
+                        users_dict[user_id] = {
+                            "id": user_id,
+                            "name": f"Пользователь {user_id}",
+                            "groups": [],
+                            "app_roles": []
+                        }
                     
-                    users[user_id]["app_roles"].append({
-                        "app_type": app_type,
-                        "app_id": app_id,
-                        "role": role
-                    })
+                    # Если это связь с группой, добавляем группу пользователю
+                    if entity.get("type") == "group" and tuple_data.get("relation") == "member":
+                        group_id = entity.get("id")
+                        if group_id not in users_dict[user_id].get("groups", []):
+                            if "groups" not in users_dict[user_id]:
+                                users_dict[user_id]["groups"] = []
+                            users_dict[user_id]["groups"].append(group_id)
+                    
+                    # Если это связь с приложением, добавляем роль пользователю
+                    elif tuple_data.get("relation") in ["owner", "editor", "viewer"]:
+                        app_type = entity.get("type")
+                        app_id = entity.get("id")
+                        role = tuple_data.get("relation")
+                        
+                        if "app_roles" not in users_dict[user_id]:
+                            users_dict[user_id]["app_roles"] = []
+                        
+                        # Проверяем, нет ли уже такой роли
+                        existing_role = False
+                        for app_role in users_dict[user_id]["app_roles"]:
+                            if (app_role.get("app_type") == app_type and 
+                                app_role.get("app_id") == app_id and 
+                                app_role.get("role") == role):
+                                existing_role = True
+                                break
+                        
+                        if not existing_role:
+                            users_dict[user_id]["app_roles"].append({
+                                "app_type": app_type,
+                                "app_id": app_id,
+                                "role": role
+                            })
         
-        return list(users.values())
+        return list(users_dict.values())
     
     def create_user(self, user_id: str, name: str, tenant_id: str = None) -> Tuple[bool, str]:
-        """Создает нового пользователя (метод-заглушка, т.к. в Permify нет прямого управления пользователями)."""
-        # В Permify нет явных пользователей, они создаются через отношения
-        # Поэтому этот метод на самом деле ничего не делает в API
-        # Но в реальном приложении здесь может быть интеграция с системой управления пользователями
+        """Создает нового пользователя и сохраняет в хранилище."""
+        users = self._load_users()
         
-        return True, f"Пользователь {user_id} добавлен в систему"
+        # Проверяем, существует ли уже пользователь с таким ID
+        for user in users:
+            if user.get('id') == user_id:
+                return False, f"Пользователь с ID {user_id} уже существует"
+        
+        # Создаем нового пользователя
+        new_user = {
+            "id": user_id,
+            "name": name or f"Пользователь {user_id}",
+            "groups": [],
+            "app_roles": []
+        }
+        
+        users.append(new_user)
+        
+        # Сохраняем обновленный список пользователей
+        if self._save_users(users):
+            return True, f"Пользователь {user_id} добавлен в систему"
+        else:
+            return False, "Ошибка при сохранении пользователя"
+    
+    def update_user(self, user_id: str, name: str) -> Tuple[bool, str]:
+        """Обновляет информацию о пользователе."""
+        users = self._load_users()
+        
+        for i, user in enumerate(users):
+            if user.get('id') == user_id:
+                users[i]['name'] = name
+                if self._save_users(users):
+                    return True, f"Информация о пользователе {user_id} обновлена"
+                else:
+                    return False, "Ошибка при сохранении пользователя"
+        
+        return False, f"Пользователь с ID {user_id} не найден"
+    
+    def delete_user(self, user_id: str) -> Tuple[bool, str]:
+        """Удаляет пользователя из хранилища."""
+        users = self._load_users()
+        
+        users = [user for user in users if user.get('id') != user_id]
+        
+        if self._save_users(users):
+            return True, f"Пользователь {user_id} удален из системы"
+        else:
+            return False, "Ошибка при удалении пользователя"
     
     def add_user_to_group(self, user_id: str, group_id: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Добавляет пользователя в группу."""
+        # Проверяем, существует ли пользователь
+        users = self._load_users()
+        user_exists = False
+        
+        for user in users:
+            if user.get('id') == user_id:
+                user_exists = True
+                break
+        
+        # Если пользователь не существует, создаем его
+        if not user_exists:
+            self.create_user(user_id, f"Пользователь {user_id}")
+        
+        # Добавляем отношение в Permify
         return self.relationship_model.assign_user_to_group(group_id, user_id, tenant_id)
     
     def remove_user_from_group(self, user_id: str, group_id: str, tenant_id: str = None) -> Tuple[bool, str]:
@@ -74,6 +172,20 @@ class UserModel(BaseModel):
     
     def assign_app_role(self, user_id: str, app_type: str, app_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Назначает пользователю роль в приложении."""
+        # Проверяем, существует ли пользователь
+        users = self._load_users()
+        user_exists = False
+        
+        for user in users:
+            if user.get('id') == user_id:
+                user_exists = True
+                break
+        
+        # Если пользователь не существует, создаем его
+        if not user_exists:
+            self.create_user(user_id, f"Пользователь {user_id}")
+        
+        # Добавляем отношение в Permify
         return self.relationship_model.assign_user_to_app(app_type, app_id, user_id, role, tenant_id)
     
     def remove_app_role(self, user_id: str, app_type: str, app_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:

@@ -1,15 +1,18 @@
 import streamlit as st
 import pandas as pd
 from .base_view import BaseView
-from app.controllers import RelationshipController, SchemaController
+from app.controllers import SchemaController, RelationshipController, UserController, GroupController, AppController
 
 class PermissionCheckView(BaseView):
-    """Представление для проверки разрешений в ручном режиме."""
+    """Представление для проверки разрешений."""
     
     def __init__(self):
         super().__init__()
-        self.controller = RelationshipController()
         self.schema_controller = SchemaController()
+        self.relationship_controller = RelationshipController()
+        self.user_controller = UserController()
+        self.group_controller = GroupController()
+        self.app_controller = AppController()
     
     def render(self, skip_status_check=False):
         """Отображает интерфейс проверки разрешений."""
@@ -21,209 +24,213 @@ class PermissionCheckView(BaseView):
         tenant_id = self.get_tenant_id("permission_check_view")
         
         # Получаем список доступных схем
-        success, schemas_result = self.schema_controller.get_schema_list(tenant_id)
+        schema_success, schema_result = self.schema_controller.get_current_schema(tenant_id)
         
-        # Переменная для хранения выбранной версии схемы
-        selected_schema_version = None
-        
-        if success:
-            schemas_list = schemas_result
-            if schemas_list.get("schemas") and len(schemas_list["schemas"]) > 0:
-                # Сортируем схемы по дате создания (новые сначала)
-                sorted_schemas = sorted(schemas_list["schemas"], 
-                                      key=lambda x: x.get('created_at', ''), 
-                                      reverse=True)
+        if schema_success:
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.subheader("Сущность")
                 
-                # Предлагаем выбор версии схемы
-                schema_options = [f"{schema.get('version')} (создана: {schema.get('created_at')})" for schema in sorted_schemas]
-                schema_option = st.selectbox("Выберите версию схемы", ["Последняя версия"] + schema_options)
+                entity_types = []
+                if schema_result:
+                    # Получаем все типы сущностей из схемы
+                    try:
+                        schema = schema_result.get("schema", {})
+                        entity_definitions = schema.get("entity_definitions", {})
+                        
+                        entity_types = list(entity_definitions.keys())
+                        
+                        # Выбор типа сущности
+                        entity_type = st.selectbox("Тип сущности", entity_types, index=entity_types.index("petitions") if "petitions" in entity_types else 0)
+                    except Exception as e:
+                        st.warning(f"Не удалось получить типы сущностей из схемы: {str(e)}")
+                        entity_type = st.text_input("Тип сущности", "petitions", key="perm_check_entity_type_input")
+                else:
+                        entity_type = st.text_input("Тип сущности", "petitions", key="perm_check_entity_type_manual")
+
+                entity_id = st.text_input("ID сущности", "1", key="perm_check_entity_id")
+            
+            with col2:
+                st.subheader("Субъект")
                 
-                if schema_option != "Последняя версия":
-                    # Извлекаем версию схемы из выбранной опции
-                    selected_schema_version = schema_option.split()[0]
+                # Выбор типа субъекта
+                subject_type = st.selectbox("Тип субъекта", ["user", "group"], key="perm_check_subject_type")
+                subject_id = st.text_input("ID субъекта", "", key="perm_check_subject_id")
         
-        # Получаем текущую схему для показа доступных типов сущностей и разрешений
-        success, schema_result = self.schema_controller.get_current_schema(tenant_id, selected_schema_version)
+            with col3:
+                st.subheader("Проверка")
         
-        # Информация о текущей схеме
-        if success and isinstance(schema_result, dict):
-            st.success(f"Загружена схема версии: {schema_result.get('version')}")
+                # Получаем разрешения для данного типа сущности
+                permissions = []
+                if schema_success and entity_type in entity_types:
+                    try:
+                        entity_def = schema.get("entity_definitions", {}).get(entity_type, {})
+                        permission_defs = entity_def.get("permissions", {})
+                        
+                        permissions = list(permission_defs.keys())
+                    except Exception as e:
+                        st.warning(f"Не удалось получить разрешения: {str(e)}")
+                
+                        if permissions:
+                            permission = st.selectbox("Разрешение", permissions, key="perm_check_permission")
+                else:
+                    permission = st.text_input("Разрешение", "view", key="perm_check_permission_input")
+                
+                # Кнопка проверки
+                check_button = st.button("Проверить разрешение", key="check_permission_button")
         
-        # Получаем все отношения
-        rel_success, rel_result = self.controller.get_relationships(tenant_id)
+            # Проверка разрешения
+            if check_button and subject_id and entity_id:
+                st.subheader("Результат проверки")
+                
+                with st.spinner("Проверка разрешения..."):
+                    success, result = self.relationship_controller.check_permission(
+                        entity_type, entity_id, permission, subject_id, tenant_id)
+                    
+                    if success:
+                        if result.get("can") == "CHECK_RESULT_ALLOWED":
+                            st.success(f"✅ Разрешение: {subject_type}:{subject_id} имеет доступ к {entity_type}:{entity_id}:{permission}")
+                        else:
+                            st.error(f"❌ Отказано: {subject_type}:{subject_id} не имеет доступа к {entity_type}:{entity_id}:{permission}")
+                        
+                        # Показываем детали
+                        with st.expander("Подробные данные ответа"):
+                            st.json(result)
+                    else:
+                        st.error(f"Ошибка при проверке разрешения: {result}")
+        else:
+            st.error(f"Не удалось получить схему: {schema_result}")
+    
+    def render_simplified(self, skip_status_check=False):
+        """Отображает упрощенный интерфейс управления разрешениями."""
+        self.show_header("Управление разрешениями", 
+                       "Простой интерфейс для проверки и визуализации прав доступа")
         
-        col1, col2 = st.columns(2)
+        if not skip_status_check and not self.show_status():
+            return
+        
+        tenant_id = self.get_tenant_id("permission_check_view_simplified")
+        
+        # Получаем данные
+        users = self.user_controller.get_users(tenant_id)
+        groups = self.group_controller.get_groups(tenant_id)
+        apps = self.app_controller.get_apps(tenant_id)
+        
+        # Только приложения с экземплярами, не шаблоны
+        app_instances = [app for app in apps if not app.get('is_template', False) and app.get('id')]
+        
+        # Удаляем дублирующуюся функциональность "Матрица доступа"
+        # и сосредотачиваемся только на проверке доступа
+        st.subheader("Проверка прав доступа пользователя")
+        
+        # Добавляем информационное сообщение
+        st.info("⚠️ Управление правами доступа (назначение ролей, добавление групп) доступно в разделе 'Объекты'")
+        
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            # Если схема успешно получена, предлагаем выбор из доступных в схеме типов
-            if success and isinstance(schema_result, dict) and "schema" in schema_result:
-                try:
-                    entity_types = list(schema_result["schema"].get("entityDefinitions", {}).keys())
-                    if entity_types:
-                        entity_type = st.selectbox("Тип сущности", entity_types, index=entity_types.index("petitions") if "petitions" in entity_types else 0)
-                    else:
-                        entity_type = st.text_input("Тип сущности", "petitions", key="perm_check_entity_type_input")
-                except Exception as e:
-                    st.warning(f"Не удалось получить типы сущностей из схемы: {str(e)}")
-                    entity_type = st.text_input("Тип сущности", "petitions", key="perm_check_entity_type_fallback")
+            # Выбор пользователя
+            if users:
+                selected_user = st.selectbox(
+                    "Выберите пользователя",
+                    [user.get('id') for user in users],
+                    format_func=lambda x: next((user.get('name', f"Пользователь {user.get('id')}") 
+                                              for user in users if user.get('id') == x), x),
+                    key="check_user"
+                )
             else:
-                entity_type = st.text_input("Тип сущности", "petitions", key="perm_check_entity_type_manual")
-            
-            entity_id = st.text_input("ID сущности", "1", key="perm_check_entity_id")
-            
-            # Если схема успешно получена, предлагаем выбор из доступных в схеме разрешений
-            if success and isinstance(schema_result, dict) and "schema" in schema_result:
-                try:
-                    entity_def = schema_result["schema"].get("entityDefinitions", {}).get(entity_type, {})
-                    permissions = list(entity_def.get("permissions", {}).keys())
-                    if permissions:
-                        permission = st.selectbox("Разрешение", permissions, key="perm_check_permission_select")
-                    else:
-                        permission = st.text_input("Разрешение", "read", key="perm_check_permission_input")
-                except Exception as e:
-                    st.warning(f"Не удалось получить разрешения из схемы: {str(e)}")
-                    permission = st.text_input("Разрешение", "read", key="perm_check_permission_fallback")
-            else:
-                permission = st.text_input("Разрешение", "read", key="perm_check_permission_manual")
+                st.info("Нет пользователей. Создайте пользователей в разделе 'Пользователи'.")
+                selected_user = st.text_input("ID пользователя", "", key="check_user_manual")
         
         with col2:
-            user_id = st.text_input("ID пользователя", "1", key="perm_check_user_id")
-        
-        # Если схема успешно получена, показываем доступные типы сущностей и разрешения
-        if success:
-            try:
-                st.subheader("Доступные типы сущностей и разрешения")
-                if isinstance(schema_result, dict) and "schema" in schema_result:
-                    entities = schema_result.get("schema", {}).get("entityDefinitions", {})
-                    
-                    # Создаем таблицу для более наглядного отображения
-                    entity_permissions = []
-                    
-                    for entity_name, entity_data in entities.items():
-                        permissions = entity_data.get("permissions", {})
-                        if permissions:
-                            perm_names = ", ".join(permissions.keys())
-                            entity_permissions.append({
-                                "Сущность": entity_name,
-                                "Разрешения": perm_names
-                            })
-                            
-                            # Показываем логику разрешений для большей ясности
-                            with st.expander(f"Подробности о {entity_name}"):
-                                for perm_name, perm_details in permissions.items():
-                                    if 'child' in perm_details:
-                                        expr = perm_details.get('child', {}).get('stringExpr', '')
-                                        if expr:
-                                            st.info(f"⚙️ {entity_name}.{perm_name} = {expr}")
-                    
-                    if entity_permissions:
-                        st.table(pd.DataFrame(entity_permissions))
-                else:
-                    st.warning("Схема имеет неожиданный формат")
-                    st.json(schema_result)
-            except Exception as e:
-                st.warning(f"Не удалось показать доступные типы: {str(e)}")
-        
-        # Если отношения успешно получены, показываем их
-        if rel_success:
-            try:
-                st.subheader("Существующие отношения")
-                tuples = rel_result.get("tuples", [])
-                
-                # Фильтруем отношения для текущего пользователя
-                user_tuples = [t for t in tuples if t.get("subject", {}).get("type") == "user" and 
-                               t.get("subject", {}).get("id") == user_id]
-                
-                # Показываем отдельно отношения для текущего пользователя в виде статичной таблицы
-                if user_tuples:
-                    st.write(f"**Отношения пользователя {user_id}:**")
-                    
-                    # Создаем данные для таблицы
-                    relation_data = []
-                    for tuple_data in user_tuples:
-                        entity = tuple_data.get("entity", {})
-                        subject = tuple_data.get("subject", {})
-                        relation = tuple_data.get("relation", "")
-                        
-                        relation_data.append({
-                            "Тип сущности": entity.get("type", ""),
-                            "ID сущности": entity.get("id", ""),
-                            "Отношение": relation,
-                            "Тип субъекта": subject.get("type", ""),
-                            "ID субъекта": subject.get("id", ""),
-                            "Полное отношение": f"{entity.get('type')}:{entity.get('id')} → {relation} → {subject.get('type')}:{subject.get('id')}"
-                        })
-                    
-                    # Создаем DataFrame для отображения таблицы
-                    df = pd.DataFrame(relation_data)
-                    
-                    # Отображаем статичную таблицу
-                    st.dataframe(df, use_container_width=True)
-                
-                # Показываем остальные отношения
-                other_tuples = [t for t in tuples if t not in user_tuples]
-                if other_tuples:
-                    st.write("**Другие отношения:**")
-                    for tuple_data in other_tuples[:5]:  # Показываем только первые 5
-                        entity = tuple_data.get("entity", {})
-                        subject = tuple_data.get("subject", {})
-                        relation = tuple_data.get("relation", "")
-                        st.write(f"{entity.get('type')}:{entity.get('id')} → {relation} → {subject.get('type')}:{subject.get('id')}")
-                    if len(other_tuples) > 5:
-                        st.write(f"...и еще {len(other_tuples) - 5} отношений")
-            except Exception as e:
-                st.warning(f"Не удалось показать отношения: {str(e)}")
-        
-        if st.button("Проверить доступ", type="primary"):
-            success, result = self.controller.check_permission(entity_type, entity_id, permission, user_id, tenant_id, selected_schema_version)
-            
-            if success:
-                # Правильно интерпретируем результат
-                can_access = False
-                
-                # Проверяем, что result - это словарь
-                if isinstance(result, dict) and "can" in result:
-                    # Проверяем в зависимости от того, как возвращается результат
-                    if isinstance(result["can"], bool):
-                        can_access = result["can"]
-                    elif result["can"] == "CHECK_RESULT_ALLOWED":
-                        can_access = True
-                    
-                    if can_access:
-                        st.success(f"✅ Доступ разрешен: пользователь {user_id} имеет разрешение {permission} для {entity_type}:{entity_id}")
-                        
-                        # Показываем подробную информацию о решении, если она есть
-                        if "metadata" in result:
-                            with st.expander("Подробная информация о решении"):
-                                st.json(result["metadata"])
-                        
-                        # Предупреждение о возможной проблеме с wildcard
-                        if entity_id == "*" and can_access:
-                            st.warning("⚠️ Внимание: Вы используете wildcard '*' в ID сущности. Это может давать неожиданные разрешения.")
-                    else:
-                        st.error(f"❌ Доступ запрещен: пользователь {user_id} не имеет разрешения {permission} для {entity_type}:{entity_id}")
-                    
-                    # Всегда показываем полный ответ для отладки
-                    with st.expander("Детали ответа API"):
-                        st.json(result)
-                else:
-                    # Если result не словарь или не содержит ключ "can"
-                    st.error("Ошибка в формате ответа API")
-                    st.json(result)
+            # Выбор приложения
+            if app_instances:
+                app_options = [(i, app) for i, app in enumerate(app_instances)]
+                selected_app_index = st.selectbox(
+                    "Выберите приложение",
+                    range(len(app_options)),
+                    format_func=lambda i: f"{app_options[i][1].get('display_name')} (ID: {app_options[i][1].get('id')})",
+                    key="check_app"
+                )
+                selected_app = app_options[selected_app_index][1]
             else:
-                # В случае ошибки показываем сообщение
-                st.error(result)
+                st.info("Нет приложений. Создайте приложения в разделе 'Приложения'.")
+                selected_app = None
+        
+        with col3:
+            # Выбор действия
+            if selected_app and selected_app.get('actions'):
+                selected_action = st.selectbox(
+                    "Выберите действие",
+                    [action.get('name') for action in selected_app.get('actions')],
+                    key="check_action"
+                )
+            else:
+                st.info("У выбранного приложения нет действий.")
+                selected_action = st.text_input("Действие", "", key="check_action_manual")
+        
+        # Кнопка проверки
+        if selected_user and selected_app and selected_action:
+            if st.button("Проверить доступ", type="primary", key="check_access_button"):
+                with st.spinner("Проверка доступа..."):
+                    success, result = self.app_controller.check_user_permission(
+                        selected_app.get('name'),
+                        selected_app.get('id'),
+                        selected_user,
+                        selected_action,
+                        tenant_id
+                    )
+                    
+                    if success:
+                        if result.get("can") == "CHECK_RESULT_ALLOWED":
+                            st.success(f"✅ Пользователь имеет разрешение на действие '{selected_action}'")
+                        else:
+                            st.error(f"❌ Пользователь не имеет разрешения на действие '{selected_action}'")
+                        
+                        # Показываем детали
+                        with st.expander("Подробная информация"):
+                            st.json(result)
+                    else:
+                        st.error(f"Ошибка при проверке разрешения: {result}")
+                    
+        # Показываем дополнительную информацию о пользователе и его ролях
+        if selected_user and selected_app:
+            st.subheader("Информация о пользователе и его ролях")
+            
+            # Проверяем, имеет ли пользователь роли в этом приложении
+            user_roles = [user_role for user_role in selected_app.get('users', []) 
+                        if user_role.get('user_id') == selected_user]
+            
+            if user_roles:
+                roles_data = []
+                for user_role in user_roles:
+                    role = user_role.get('role')
+                    roles_data.append({
+                        "Роль": {"owner": "Владелец", "editor": "Редактор", "viewer": "Просмотрщик"}.get(role, role)
+                    })
                 
-                # Добавляем рекомендацию по исправлению, если схема не найдена
-                if isinstance(result, str) and "ERROR_CODE_SCHEMA_NOT_FOUND" in result:
-                    st.warning("""
-                    **Схема не найдена!**
-                    
-                    Возможные причины:
-                    1. Схема еще не загружена в Permify
-                    2. Указана неверная версия схемы
-                    
-                    Рекомендации:
-                    - Перейдите в раздел "Схемы" и загрузите схему из файла schema.perm
-                    - Убедитесь, что сущность и разрешение указаны правильно
-                    """) 
+                st.dataframe(
+                    pd.DataFrame(roles_data),
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.info("Пользователь не имеет ролей в этом приложении")
+                
+            # Проверяем, входит ли пользователь в группы с доступом к приложению
+            user_groups = []
+            for group in groups:
+                if selected_user in group.get('members', []) and group.get('id') in selected_app.get('groups', []):
+                    user_groups.append({
+                        "Группа": group.get('name', f"Группа {group.get('id')}"),
+                        "ID": group.get('id')
+                    })
+            
+            if user_groups:
+                st.subheader("Группы пользователя с доступом к объекту")
+                st.dataframe(
+                    pd.DataFrame(user_groups),
+                    use_container_width=True,
+                    hide_index=True
+                ) 

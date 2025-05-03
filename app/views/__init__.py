@@ -5,4 +5,6 @@ from .app_view import AppView
 from .schema_view import SchemaView
 from .relationship_view import RelationshipView
 from .permission_check_view import PermissionCheckView
-from .status_view import StatusView 
+from .status_view import StatusView
+from .index_view import IndexView
+from .tenant_view import TenantView 
