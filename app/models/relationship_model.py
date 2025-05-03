@@ -215,19 +215,80 @@ class RelationshipModel(BaseModel):
             "permission": permission,
             "subject": {
                 "type": "user", 
-                "id": user_id,
-                "relation": ""
+                "id": user_id
             }
         }
         
+        # Отправляем запрос
         endpoint = f"/v1/tenants/{tenant_id}/permissions/check"
-        success, result = self.make_api_request(endpoint, data)
         
-        if success:
-            return True, result
+        try:
+            success, result = self.make_api_request(endpoint, data)
+            
+            # Проверка результата
+            if success:
+                # Если у нас нет метаданных по какой-то причине, добавим пустые
+                if 'metadata' not in result:
+                    result['metadata'] = {}
+                    
+                # Если у нас denial по умолчанию, проверим доступ через группы
+                if not result.get("can") and result.get("can") != "CHECK_RESULT_ALLOWED":
+                    # Получаем группы пользователя
+                    user_groups = self.get_user_groups(user_id, tenant_id)
+                    
+                    # Проверяем доступ через каждую группу
+                    for group_id in user_groups:
+                        group_data = {
+                            "metadata": {
+                                "snap_token": "",
+                                "schema_version": schema_version or "",
+                                "depth": 20
+                            },
+                            "entity": {"type": entity_type, "id": entity_id},
+                            "permission": permission,
+                            "subject": {
+                                "type": "group", 
+                                "id": group_id
+                            }
+                        }
+                        
+                        group_success, group_result = self.make_api_request(endpoint, group_data)
+                        
+                        # Если хотя бы одна группа имеет доступ, разрешаем
+                        if group_success and (group_result.get("can") == True or group_result.get("can") == "CHECK_RESULT_ALLOWED"):
+                            result["can"] = True
+                            result["metadata"]["reason"] = f"Access granted via group membership (group: {group_id})"
+                            break
+            
+            return success, result
+        except Exception as e:
+            return False, f"Ошибка при проверке разрешения: {str(e)}"
+    
+    def get_user_groups(self, user_id: str, tenant_id: str = None) -> List[str]:
+        """Получает список групп, в которых состоит пользователь."""
+        tenant_id = tenant_id or self.default_tenant
         
-        # В случае ошибки API возвращаем её
-        return False, result
+        # Получаем все отношения
+        success, relationships = self.get_relationships(tenant_id)
+        if not success:
+            return []
+        
+        # Ищем группы пользователя
+        user_groups = []
+        for tuple_data in relationships.get("tuples", []):
+            entity = tuple_data.get("entity", {})
+            subject = tuple_data.get("subject", {})
+            relation = tuple_data.get("relation", "")
+            
+            # Проверяем, что это отношение member между группой и пользователем
+            if (entity.get("type") == "group" and 
+                relation == "member" and
+                subject.get("type") == "user" and
+                subject.get("id") == user_id):
+                
+                user_groups.append(entity.get("id"))
+        
+        return user_groups
     
     def assign_user_to_group(self, group_id: str, user_id: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Добавляет пользователя в группу (создает отношение group-member-user)."""
@@ -263,9 +324,12 @@ class RelationshipModel(BaseModel):
         
         return self.create_relationship(app_name, app_id, role, "user", user_id, tenant_id)
     
-    def assign_group_to_app(self, app_name: str, app_id: str, group_id: str, tenant_id: str = None) -> Tuple[bool, str]:
-        """Назначает группу приложению (создает отношение app-member-group)."""
-        return self.create_relationship(app_name, app_id, "member", "group", group_id, tenant_id)
+    def assign_group_to_app(self, app_name: str, app_id: str, group_id: str, role: str = "viewer", tenant_id: str = None) -> Tuple[bool, str]:
+        """Назначает группу приложению с определенной ролью."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Используем стандартную роль вместо фиксированного "member"
+        return self.create_relationship(app_name, app_id, role, "group", group_id, tenant_id)
     
     def delete_multiple_relationships(self, relationships: List[Dict[str, str]], tenant_id: str = None) -> Tuple[int, int, List[str]]:
         """Удаляет несколько отношений."""

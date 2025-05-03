@@ -29,13 +29,13 @@ class AppController(BaseController):
         """Удаляет роль пользователя в приложении."""
         return self.app_model.remove_user_from_app(app_name, app_id, user_id, role, tenant_id)
     
-    def assign_group_to_app(self, app_name, app_id, group_id, tenant_id=None):
-        """Назначает группу приложению."""
-        return self.app_model.assign_group_to_app(app_name, app_id, group_id, tenant_id)
+    def assign_group_to_app(self, app_name: str, app_id: str, group_id: str, role: str = "viewer", tenant_id: str = None) -> Tuple[bool, str]:
+        """Назначает группу приложению с определенной ролью."""
+        return self.app_model.assign_group_to_app(app_name, app_id, group_id, role, tenant_id)
     
-    def remove_group_from_app(self, app_name, app_id, group_id, tenant_id=None):
-        """Удаляет группу из приложения."""
-        return self.app_model.remove_group_from_app(app_name, app_id, group_id, tenant_id)
+    def remove_group_from_app(self, app_name: str, app_id: str, group_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Удаляет роль группы в приложении."""
+        return self.app_model.remove_group_from_app(app_name, app_id, group_id, role, tenant_id)
     
     def check_user_permission(self, app_type: str, app_id: str, user_id: str, action: str, tenant_id: str = None) -> Tuple[bool, Dict[str, Any]]:
         """Проверяет разрешение пользователя для действия с приложением."""

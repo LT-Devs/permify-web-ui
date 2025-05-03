@@ -519,13 +519,20 @@ class AppModel(BaseModel):
         """Удаляет роль пользователя в приложении."""
         return self.relationship_model.delete_relationship(app_name, app_id, role, "user", user_id, tenant_id)
     
-    def assign_group_to_app(self, app_name: str, app_id: str, group_id: str, tenant_id: str = None) -> Tuple[bool, str]:
-        """Назначает группу приложению."""
-        return self.relationship_model.assign_group_to_app(app_name, app_id, group_id, tenant_id)
+    def assign_group_to_app(self, app_name: str, app_id: str, group_id: str, role: str = "viewer", tenant_id: str = None) -> Tuple[bool, str]:
+        """Назначает группу приложению с определенной ролью."""
+        success, result = self.relationship_model.assign_group_to_app(app_name, app_id, group_id, role, tenant_id)
+        
+        if success:
+            # После назначения группы обновляем схему
+            tenant_id = tenant_id or self.default_tenant
+            self.force_rebuild_schema(tenant_id)
+        
+        return success, result
     
-    def remove_group_from_app(self, app_name: str, app_id: str, group_id: str, tenant_id: str = None) -> Tuple[bool, str]:
-        """Удаляет группу из приложения."""
-        return self.relationship_model.delete_relationship(app_name, app_id, "member", "group", group_id, tenant_id)
+    def remove_group_from_app(self, app_name: str, app_id: str, group_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Удаляет группу из приложения с определенной ролью."""
+        return self.relationship_model.delete_relationship(app_name, app_id, role, "group", group_id, tenant_id)
     
     def check_user_permission(self, app_name: str, app_id: str, user_id: str, action: str, tenant_id: str = None) -> Tuple[bool, Any]:
         """Проверяет разрешение пользователя на действие в приложении."""

@@ -52,9 +52,9 @@ class AppView(BaseView):
             if 'reset_app_form' in st.session_state and st.session_state.reset_app_form:
                 if 'app_actions' in st.session_state:
                     st.session_state.app_actions = [
-                        {"name": "view", "editor_allowed": True, "viewer_allowed": True, "group_allowed": True},
-                        {"name": "edit", "editor_allowed": True, "viewer_allowed": False, "group_allowed": False},
-                        {"name": "delete", "editor_allowed": False, "viewer_allowed": False, "group_allowed": False}
+                        {"name": "view", "editor_allowed": True, "viewer_allowed": True},
+                        {"name": "edit", "editor_allowed": True, "viewer_allowed": False},
+                        {"name": "delete", "editor_allowed": False, "viewer_allowed": False}
                     ]
                 # Сбрасываем флаг сброса формы
                 st.session_state.reset_app_form = False
@@ -80,9 +80,9 @@ class AppView(BaseView):
             
             if 'app_actions' not in st.session_state:
                 st.session_state.app_actions = [
-                    {"name": "view", "editor_allowed": True, "viewer_allowed": True, "group_allowed": True},
-                    {"name": "edit", "editor_allowed": True, "viewer_allowed": False, "group_allowed": False},
-                    {"name": "delete", "editor_allowed": False, "viewer_allowed": False, "group_allowed": False}
+                    {"name": "view", "editor_allowed": True, "viewer_allowed": True},
+                    {"name": "edit", "editor_allowed": True, "viewer_allowed": False},
+                    {"name": "delete", "editor_allowed": False, "viewer_allowed": False}
                 ]
             
             # Добавляем поддержку настраиваемых отношений
@@ -235,22 +235,20 @@ class AppView(BaseView):
             st.caption("Укажите, какие действия можно выполнять с этим объектом и кто имеет на них право")
             
             # Заголовки для таблицы действий
-            cols = st.columns([3, 2, 2, 2, 1])
+            cols = st.columns([3, 2, 2, 1])
             with cols[0]:
                 st.markdown('<div class="perm-header">Действие</div>', unsafe_allow_html=True)
             with cols[1]:
                 st.markdown('<div class="perm-header">Редакторы</div>', unsafe_allow_html=True)
             with cols[2]:
                 st.markdown('<div class="perm-header">Просмотрщики</div>', unsafe_allow_html=True)
-            with cols[3]:
-                st.markdown('<div class="perm-header">Группы</div>', unsafe_allow_html=True)
             
             # Отображаем существующие действия
             for i, action in enumerate(st.session_state.app_actions):
                 # Добавляем div с классом для стилизации строки
                 st.markdown(f'<div class="action-row">', unsafe_allow_html=True)
                 
-                cols = st.columns([3, 2, 2, 2, 1])
+                cols = st.columns([3, 2, 2, 1])
                 with cols[0]:
                     st.session_state.app_actions[i]["name"] = st.text_input(
                         label="Название действия",
@@ -277,14 +275,6 @@ class AppView(BaseView):
                     )
                 
                 with cols[3]:
-                    st.session_state.app_actions[i]["group_allowed"] = st.checkbox(
-                        "Группы", 
-                        action["group_allowed"],
-                        key=f"groups_{i}",
-                        help="Группы могут выполнять это действие"
-                    )
-                
-                with cols[4]:
                     if st.button("❌", key=f"remove_action_{i}", help="Удалить это действие"):
                         if len(st.session_state.app_actions) > 1:
                             st.session_state.app_actions.pop(i)
@@ -322,7 +312,7 @@ class AppView(BaseView):
             # Кнопка для добавления нового действия
                 if st.button("➕ Добавить действие", key="add_action"):
                     st.session_state.app_actions.append(
-                        {"name": "", "editor_allowed": False, "viewer_allowed": False, "group_allowed": False}
+                        {"name": "", "editor_allowed": False, "viewer_allowed": False}
                     )
                     st.rerun()
             
@@ -345,7 +335,7 @@ class AppView(BaseView):
                                 # Копируем все пользовательские разрешения из действий
                                 for action in valid_actions:
                                     custom_keys = [k for k in action.keys() if k.endswith("_allowed") 
-                                                  and k not in ["editor_allowed", "viewer_allowed", "group_allowed"]]
+                                                  and k not in ["editor_allowed", "viewer_allowed"]]
                                     for key in custom_keys:
                                         relation = key.replace("_allowed", "")
                                         if relation not in metadata.get("custom_relations", []):
@@ -419,13 +409,12 @@ class AppView(BaseView):
                             action_data = {
                                 "name": action.get('name', ''),
                                 "editor_allowed": action.get('editor_allowed', False),
-                                "viewer_allowed": action.get('viewer_allowed', False),
-                                "group_allowed": action.get('group_allowed', False)
+                                "viewer_allowed": action.get('viewer_allowed', False)
                             }
                             
                             # Добавляем пользовательские свойства
                             for key, value in action.items():
-                                if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed", "group_allowed"]:
+                                if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed"]:
                                     action_data[key] = value
                             
                             st.session_state.edit_app_actions.append(action_data)
@@ -450,7 +439,7 @@ class AppView(BaseView):
                         # Добавляем div с классом для стилизации строки
                         st.markdown(f'<div class="action-row">', unsafe_allow_html=True)
                         
-                        cols = st.columns([3, 2, 2, 2, 1])
+                        cols = st.columns([3, 2, 2, 1])
                         with cols[0]:
                             st.session_state.edit_app_actions[i]["name"] = st.text_input(
                                 label="Название действия",
@@ -477,14 +466,6 @@ class AppView(BaseView):
                             )
                         
                         with cols[3]:
-                            st.session_state.edit_app_actions[i]["group_allowed"] = st.checkbox(
-                                "Группы",
-                                action["group_allowed"],
-                                key=f"edit_groups_{i}",
-                                help="Группы могут выполнять это действие"
-                            )
-                        
-                        with cols[4]:
                             if st.button("❌", key=f"edit_remove_action_{i}", help="Удалить это действие"):
                                 if len(st.session_state.edit_app_actions) > 1:
                                     st.session_state.edit_app_actions.pop(i)
@@ -495,7 +476,7 @@ class AppView(BaseView):
                         
                         # Добавляем отношения из действия
                         for key in action.keys():
-                            if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed", "group_allowed"]:
+                            if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed"]:
                                 relation = key.replace("_allowed", "")
                                 if relation not in all_custom_relations:
                                     all_custom_relations.append(relation)
@@ -532,7 +513,7 @@ class AppView(BaseView):
                         # Кнопка для добавления нового действия
                         if st.button("➕ Добавить действие", key="edit_add_action"):
                             st.session_state.edit_app_actions.append(
-                                {"name": "", "editor_allowed": False, "viewer_allowed": False, "group_allowed": False}
+                                {"name": "", "editor_allowed": False, "viewer_allowed": False}
                             )
                             st.rerun()
                     
@@ -555,7 +536,7 @@ class AppView(BaseView):
                                 # Добавляем отношения из действий
                                 for action in st.session_state.edit_app_actions:
                                     for key in action.keys():
-                                        if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed", "group_allowed"]:
+                                        if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed"]:
                                             relation = key.replace("_allowed", "")
                                             if relation not in custom_relations:
                                                 custom_relations.append(relation)
@@ -614,7 +595,6 @@ class AppView(BaseView):
                         action_name = action.get('name', '')
                         editor_allowed = action.get('editor_allowed', False)
                         viewer_allowed = action.get('viewer_allowed', False)
-                        group_allowed = action.get('group_allowed', False)
                         
                         allowed_roles = []
                         if True:  # Владельцы всегда имеют доступ
@@ -623,12 +603,10 @@ class AppView(BaseView):
                             allowed_roles.append("Редакторы")
                         if viewer_allowed:
                             allowed_roles.append("Просмотрщики")
-                        if group_allowed:
-                            allowed_roles.append("Группы")
                         
                         # Добавляем пользовательские отношения
                         for key, value in action.items():
-                            if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed", "group_allowed"] and value:
+                            if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed"] and value:
                                 relation = key.replace("_allowed", "")
                                 allowed_roles.append(f"{relation}")
                         
@@ -779,88 +757,149 @@ class AppView(BaseView):
                 
                 # Информация о доступных действиях
                 with st.expander("ℹ️ Доступ групп к действиям", expanded=True):
-                    # Показываем, какие действия доступны для групп
-                    actions_with_group_access = [action.get('name') for action in selected_app.get('actions', []) 
-                                             if action.get('group_allowed', False)]
-                    
-                    if actions_with_group_access:
-                        st.markdown("**Действия, доступные для групп:**")
-                        st.write(", ".join(actions_with_group_access))
-                    else:
-                        st.warning("⚠️ Ни одно действие не разрешено для групп. Группы не смогут выполнять никакие действия.")
-                    
+                    # Показываем, какие действия доступны для каких групп
+                    st.markdown("**Группы и их роли получают доступ к действиям согласно настройкам действий объекта.**")
+                    st.info("Каждая группа может иметь одну из ролей: Владелец, Редактор или Просмотрщик, а также пользовательские роли.")
+                
                 # Таблица текущих групп
-                app_groups = selected_app.get('groups', [])
+                app_groups = []
+                
+                # Получение групп с их ролями из отношений
+                success, relationships = self.controller.relationship_model.get_relationships(tenant_id)
+                if success:
+                    for tuple_data in relationships.get("tuples", []):
+                        entity = tuple_data.get("entity", {})
+                        subject = tuple_data.get("subject", {})
+                        relation = tuple_data.get("relation", "")
+                        
+                        # Проверяем, что это отношение для текущего приложения и группы
+                        if (entity.get("type") == selected_app.get('name') and 
+                            entity.get("id") == selected_app.get('id') and
+                            subject.get("type") == "group"):
+                            
+                            group_id = subject.get("id")
+                            group_info = next((g for g in groups if g.get('id') == group_id), 
+                                            {"id": group_id, "name": f"Группа {group_id}"})
+                            
+                            app_groups.append({
+                                "ID": group_id,
+                                "Название": group_info.get('name', f"Группа {group_id}"),
+                                "Роль": relation,
+                                "Участников": len(group_info.get('members', []))
+                            })
+                            
                 if app_groups:
                     st.markdown("#### Текущие группы с доступом")
-                    groups_data = []
-                    for group_id in app_groups:
-                        # Находим информацию о группе
-                        group_info = next((group for group in groups if group.get('id') == group_id), 
-                                         {"id": group_id, "name": f"Группа {group_id}"})
-                        
-                        groups_data.append({
-                            "ID": group_id,
-                            "Название": group_info.get('name', f"Группа {group_id}"),
-                            "Участников": len(group_info.get('members', []))
-                                })
-                            
-                    if groups_data:
-                        st.dataframe(
-                            pd.DataFrame(groups_data),
-                            use_container_width=True,
-                            hide_index=True
+                    
+                    # Отображаем таблицу групп с их ролями
+                    df = pd.DataFrame(app_groups)
+                    
+                    # Преобразуем роли в более читаемый формат
+                    role_map = {
+                        "owner": "👑 Владелец",
+                        "editor": "✏️ Редактор",
+                        "viewer": "👁️ Просмотрщик"
+                    }
+                    
+                    # Форматируем роли
+                    df["Роль"] = df["Роль"].apply(lambda x: role_map.get(x, f"🔧 {x.capitalize()}"))
+                    
+                    st.dataframe(
+                        df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # Удаление роли группы
+                    st.markdown("#### Удалить доступ группы")
+                    col1, col2, col3 = st.columns([2, 2, 1])
+                    
+                    with col1:
+                        group_to_remove_index = st.selectbox(
+                            "Выберите группу",
+                            range(len(app_groups)),
+                            format_func=lambda i: f"{app_groups[i]['Название']}",
+                            key="group_to_remove"
                         )
                         
-                        # Удаление группы
-                        st.markdown("#### Удалить группу")
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
-                            group_to_remove = st.selectbox(
-                                "Выберите группу для удаления",
-                                app_groups,
-                                format_func=lambda x: next((g.get('name', f"Группа {g.get('id')}") 
-                                                          for g in groups if g.get('id') == x), f"Группа {x}"),
-                                key="group_to_remove"
-                            )
+                    with col2:
+                        # Получаем роль из базы, а не из отображаемой строки
+                        group_role = next((tuple_data.get("relation") 
+                                         for tuple_data in relationships.get("tuples", [])
+                                         if tuple_data.get("entity", {}).get("type") == selected_app.get('name') and
+                                            tuple_data.get("entity", {}).get("id") == selected_app.get('id') and
+                                            tuple_data.get("subject", {}).get("type") == "group" and
+                                            tuple_data.get("subject", {}).get("id") == app_groups[group_to_remove_index]["ID"]),
+                                        "viewer")
+                        
+                        st.text(f"Роль: {role_map.get(group_role, group_role)}")
+                        
+                    with col3:
+                        st.write(" ")
+                        st.write(" ")
+                        if st.button("❌ Удалить", key="remove_group_from_app"):
+                            group_id = app_groups[group_to_remove_index]["ID"]
                             
-                        with col2:
-                            st.write(" ")
-                            st.write(" ")
-                            if st.button("❌ Удалить", key="remove_group_from_app"):
-                                success, message = self.controller.remove_group_from_app(
-                                    selected_app.get('name'),
-                                    selected_app.get('id'),
-                                    group_to_remove,
-                                    tenant_id
-                                )
-                                if success:
-                                    st.success(f"Группа удалена из объекта")
-                                    st.rerun()
-                                else:
-                                    st.error(message)
+                            success, message = self.controller.remove_group_from_app(
+                                selected_app.get('name'),
+                                selected_app.get('id'),
+                                group_id,
+                                group_role,  # Используем фактическую роль
+                                tenant_id
+                            )
+                            if success:
+                                st.success(f"Группа удалена из объекта")
+                                st.rerun()
+                            else:
+                                st.error(message)
                 else:
                     st.info("Нет групп с доступом к этому объекту")
                 
-                # Добавление группы
+                # Добавление группы с выбором роли
                 st.markdown("#### Добавить группу с доступом")
                 
                 # Фильтруем группы, которые еще не имеют доступа
-                available_groups = [g for g in groups if g.get('id') not in app_groups]
+                # Теперь группа может иметь несколько ролей, поэтому просто показываем все группы
+                available_groups = groups
                 
                 if available_groups:
-                    col1, col2 = st.columns([3, 1])
+                    col1, col2, col3 = st.columns([2, 2, 1])
                     
                     with col1:
                         selected_group = st.selectbox(
                             "Выберите группу",
                             [g.get('id') for g in available_groups],
                             format_func=lambda x: next((g.get('name', f"Группа {g.get('id')}") 
-                                                      for g in available_groups if g.get('id') == x), f"Группа {x}"),
+                                                      for g in available_groups if g.get('id') == x), 
+                                                     f"Группа {x}"),
                             key="group_to_add"
                         )
-                        
+                            
                     with col2:
+                        # Выбор роли для группы
+                        role_options = [
+                            ("owner", "👑 Владелец (полный доступ)"),
+                            ("editor", "✏️ Редактор (может изменять)"),
+                            ("viewer", "👁️ Просмотрщик (только чтение)")
+                        ]
+                        
+                        # Добавляем пользовательские роли
+                        custom_relations = []
+                        if 'metadata' in selected_app and 'custom_relations' in selected_app.get('metadata', {}):
+                            for relation in selected_app.get('metadata', {}).get('custom_relations', []):
+                                # Добавляем с emoji для визуального отличия
+                                role_options.append((relation, f"🔧 {relation.capitalize()}"))
+                                custom_relations.append(relation)
+                            
+                        selected_role_index = st.selectbox(
+                            "Выберите роль для группы",
+                            range(len(role_options)),
+                            format_func=lambda i: role_options[i][1],
+                            key="group_role_to_assign"
+                        )
+                        selected_role = role_options[selected_role_index][0]
+                        
+                    with col3:
                         st.write(" ")
                         st.write(" ")
                         if st.button("➕ Добавить", key="add_group_to_app", type="primary"):
@@ -868,17 +907,15 @@ class AppView(BaseView):
                                 selected_app.get('name'),
                                 selected_app.get('id'),
                                 selected_group,
+                                selected_role,  # Передаем выбранную роль
                                 tenant_id
                             )
                             if success:
-                                st.success(f"Группе предоставлен доступ")
+                                st.success(f"Группе назначена роль {role_options[selected_role_index][1]}")
                                 st.rerun()
                             else:
                                 st.error(message)
                 else:
-                    if groups:
-                        st.info("Все имеющиеся группы уже имеют доступ к этому объекту")
-                    else:
-                        st.warning("Нет доступных групп. Создайте группы в разделе 'Группы'.")
+                    st.warning("Нет доступных групп. Создайте группы в разделе 'Группы'.")
         else:
             st.warning("Объекты не найдены. Создайте новый объект, используя форму выше.") 

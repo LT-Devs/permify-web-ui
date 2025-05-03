@@ -336,12 +336,15 @@ class SchemaModel(BaseModel):
                 schema_content += "  relation owner @user\n"
                 schema_content += "  relation editor @user\n"
                 schema_content += "  relation viewer @user\n"
-                schema_content += "  relation member @group\n"
+                schema_content += "  relation owner @group\n"  # Добавляем роли для групп
+                schema_content += "  relation editor @group\n"
+                schema_content += "  relation viewer @group\n"
                 
                 # Добавляем пользовательские отношения
                 custom_relations = app.get('metadata', {}).get('custom_relations', [])
                 for relation in custom_relations:
                     schema_content += f"  relation {relation} @user\n"
+                    schema_content += f"  relation {relation} @group\n"  # Добавляем роли для групп
                 
                 # Пустая строка между отношениями и действиями
                 schema_content += "\n"
@@ -360,8 +363,6 @@ class SchemaModel(BaseModel):
                         rule_parts.append("editor")
                     if action.get('viewer_allowed', False):
                         rule_parts.append("viewer")
-                    if action.get('group_allowed', False):
-                        rule_parts.append("member")
                     
                     # Добавляем пользовательские роли
                     for key, value in action.items():
