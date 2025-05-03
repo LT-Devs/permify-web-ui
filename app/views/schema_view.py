@@ -81,7 +81,7 @@ class SchemaView(BaseView):
             if st.button("🔄 Пересоздать схему", type="primary", key="rebuild_schema_button"):
                 with st.spinner("Обновление схемы..."):
                     success, result = self.app_controller.force_rebuild_schema(tenant_id)
-                    
+                                        
                     if success:
                         st.success("✅ Схема успешно обновлена!")
                     else:
@@ -206,5 +206,5 @@ entity document {
                     st.json(schema_result)
                 else:
                     st.error(f"Ошибка получения схемы: {schema_result}")
-        else:
-            st.error(f"Ошибка получения списка схем: {schema_result}") 
+            else:
+                st.error(f"Ошибка получения списка схем: {schema_result}") 

@@ -1,3 +1,40 @@
 {
-  "tuples": []
+  "tuples": [
+    {
+      "entity": {
+        "type": "group",
+        "id": "1"
+      },
+      "relation": "member",
+      "subject": {
+        "type": "user",
+        "id": "1",
+        "relation": ""
+      }
+    },
+    {
+      "entity": {
+        "type": "Testing",
+        "id": "1"
+      },
+      "relation": "exporters",
+      "subject": {
+        "type": "group",
+        "id": "1",
+        "relation": ""
+      }
+    },
+    {
+      "entity": {
+        "type": "Testing",
+        "id": "1"
+      },
+      "relation": "exporters",
+      "subject": {
+        "type": "user",
+        "id": "1",
+        "relation": ""
+      }
+    }
+  ]
 }

@@ -42,7 +42,7 @@
           "name": "export",
           "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 export",
           "editor_allowed": true,
-          "viewer_allowed": true,
+          "viewer_allowed": false,
           "group_allowed": false,
           "exporters_allowed": true,
           "nigger_allowed": false,
@@ -58,15 +58,29 @@
         {
           "user_id": "1",
           "role": "manager"
+        },
+        {
+          "user_id": "1",
+          "role": "viewer"
+        },
+        {
+          "user_id": "1",
+          "role": "exporters"
+        },
+        {
+          "user_id": "1",
+          "role": "owner"
         }
       ],
-      "groups": [],
+      "groups": [
+        "1"
+      ],
       "metadata": {
         "custom_relations": [
-          "approver",
-          "nigger",
           "exporters",
-          "manager"
+          "nigger",
+          "manager",
+          "approver"
         ]
       }
     }
