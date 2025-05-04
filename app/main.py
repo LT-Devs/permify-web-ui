@@ -14,6 +14,7 @@ from app.views import (
     RelationshipView, UserView, GroupView, AppView
 )
 from app.controllers import BaseController
+from app.views.styles import get_modern_styles
 
 # Настройка Streamlit
 st.set_page_config(
@@ -22,6 +23,9 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Применяем современные стили
+st.markdown(get_modern_styles(), unsafe_allow_html=True)
 
 def check_permify_status():
     """Проверяет статус подключения к Permify."""
@@ -39,45 +43,53 @@ def main():
     if 'tenant_id' not in st.session_state:
         st.session_state.tenant_id = DEFAULT_TENANT
     
-    # Создаем боковое меню
+    # Создаем боковое меню с улучшенным дизайном
     with st.sidebar:
-        st.title("Permify GUI")
-        st.caption("Упрощенный интерфейс управления")
+        st.title("🔐 Permify")
+        st.caption("Управление системой доступа")
         
-        # Раздел "Арендатор" (Tenant)
+        # Разделитель с красивым оформлением
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        
+        # Раздел "Tenant" с современным оформлением
+        st.markdown("#### Настройки tenant")
         tenant_id = st.text_input(
-            "ID арендатора (tenant)",
+            "ID tenant",
             value=st.session_state.get('tenant_id', DEFAULT_TENANT),
-            help="Идентификатор арендатора в Permify",
+            help="Идентификатор tenant в Permify",
             key="tenant_id_input"
         )
         
-        # Обновляем ID арендатора в сессии
+        # Обновляем ID tenant в сессии
         if tenant_id != st.session_state.get('tenant_id'):
             st.session_state.tenant_id = tenant_id
         
         # Проверяем статус Permify
         check_permify_status()
         
-        # Навигация
-        st.header("Навигация")
+        # Разделитель с красивым оформлением
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
-        # Список страниц с иконками и описаниями
+        # Навигация с иконками и современным дизайном
+        st.markdown("#### Навигация")
+        
+        # Список страниц с иконками
         pages = [
-            {"id": "home", "name": "🏠 Главная", "description": "Обзор системы"},
-            {"id": "apps", "name": "📱 Объекты", "description": "Управление объектами и правами доступа"},
-            {"id": "users", "name": "👤 Пользователи", "description": "Управление пользователями"},
-            {"id": "groups", "name": "👥 Группы", "description": "Управление группами пользователей"},
-            {"id": "relationships", "name": "🔗 Отношения", "description": "Управление отношениями между объектами"},
-            {"id": "check", "name": "✅ Проверка доступа", "description": "Проверка прав доступа пользователей к объектам"},
-            {"id": "schemas", "name": "📝 Схемы", "description": "Управление схемами доступа"},
-            {"id": "tenants", "name": "🏢 Арендаторы", "description": "Управление арендаторами"}
+            {"id": "home", "icon": "🏠", "name": "Обзор", "description": "Обзор системы"},
+            {"id": "apps", "icon": "📱", "name": "Приложения", "description": "Управление приложениями и правами доступа"},
+            {"id": "users", "icon": "👤", "name": "Пользователи", "description": "Управление пользователями"},
+            {"id": "groups", "icon": "👥", "name": "Группы", "description": "Управление группами пользователей"},
+            {"id": "relationships", "icon": "🔗", "name": "Отношения", "description": "Управление отношениями между объектами"},
+            {"id": "check", "icon": "✅", "name": "Проверка доступа", "description": "Проверка прав доступа пользователей к объектам"},
+            {"id": "schemas", "icon": "📝", "name": "Схемы", "description": "Управление схемами доступа"},
+            {"id": "tenants", "icon": "🏢", "name": "Tenants", "description": "Управление tenants"}
         ]
         
-        # Виджет для выбора страницы
+        # Современные кнопки навигации с использованием st.button
         page = None
         for item in pages:
-            if st.button(item["name"], help=item["description"], key=f"nav_{item['id']}"):
+            button_label = f"{item['icon']} {item['name']}"
+            if st.button(button_label, help=item["description"], key=f"nav_{item['id']}"):
                 page = item["id"]
                 st.session_state.page = page
         
@@ -86,24 +98,34 @@ def main():
             page = st.session_state.page
         elif page is None:
             page = "home"
+            
+        # Подвал (footer) с информацией о системе
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="color: var(--text-secondary); font-size: 0.8rem; padding: 0.5rem 0;">
+            <p><strong>Permify GUI</strong> версия 2.0.1a</p>
+            <p>© 2023 BadKiko (LT-Devs)</p>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Отображаем выбранную страницу
-    if page == "home":
-        IndexView().render()
-    elif page == "apps":
-        AppView().render()
-    elif page == "users":
-        UserView().render()
-    elif page == "groups":
-        GroupView().render()
-    elif page == "relationships":
-        RelationshipView().render()
-    elif page == "schemas":
-        SchemaView().render()
-    elif page == "check":
-        PermissionCheckView().render_simplified()
-    elif page == "tenants":
-        TenantView().render()
+    # Отображаем выбранную страницу с контейнером
+    with st.container():
+        if page == "home":
+            IndexView().render()
+        elif page == "apps":
+            AppView().render()
+        elif page == "users":
+            UserView().render()
+        elif page == "groups":
+            GroupView().render()
+        elif page == "relationships":
+            RelationshipView().render()
+        elif page == "schemas":
+            SchemaView().render()
+        elif page == "check":
+            PermissionCheckView().render_simplified()
+        elif page == "tenants":
+            TenantView().render()
 
 # Запуск приложения
 if __name__ == "__main__":

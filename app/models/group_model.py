@@ -160,6 +160,58 @@ class GroupModel(BaseModel):
             return True, f"Группа {group_id} удалена из системы"
         else:
             return False, "Ошибка при удалении группы"
+            
+    def delete_group_with_relations(self, group_id: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Удаляет группу и все ее отношения из системы."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Сначала удаляем группу из хранилища
+        delete_success, delete_message = self.delete_group(group_id)
+        if not delete_success:
+            return delete_success, delete_message
+        
+        # Получаем текущие отношения для нахождения всех связей группы
+        success, relationships = self.relationship_model.get_relationships(tenant_id)
+        if not success:
+            return True, f"Группа {group_id} удалена, но не удалось получить отношения"
+        
+        # Собираем все отношения, связанные с группой
+        group_relationships = []
+        for tuple_data in relationships.get("tuples", []):
+            entity = tuple_data.get("entity", {})
+            subject = tuple_data.get("subject", {})
+            relation = tuple_data.get("relation", "")
+            
+            # Отношения, где группа - сущность (пользователи в группе)
+            if entity.get("type") == "group" and entity.get("id") == group_id:
+                group_relationships.append({
+                    "entity_type": "group",
+                    "entity_id": group_id,
+                    "relation": relation,
+                    "subject_type": subject.get("type"),
+                    "subject_id": subject.get("id")
+                })
+            
+            # Отношения, где группа - субъект (группа имеет роли в приложениях)
+            elif subject.get("type") == "group" and subject.get("id") == group_id:
+                group_relationships.append({
+                    "entity_type": entity.get("type"),
+                    "entity_id": entity.get("id"),
+                    "relation": relation,
+                    "subject_type": "group",
+                    "subject_id": group_id
+                })
+        
+        # Удаляем все отношения группы
+        if group_relationships:
+            deleted_count, failed_count, errors = self.relationship_model.delete_multiple_relationships(
+                group_relationships, tenant_id
+            )
+            
+            if failed_count > 0:
+                return True, f"Группа {group_id} удалена, но {failed_count} из {deleted_count + failed_count} отношений не удалены"
+        
+        return True, f"Группа {group_id} и все её отношения успешно удалены"
     
     def add_user_to_group(self, group_id: str, user_id: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Добавляет пользователя в группу."""

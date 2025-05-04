@@ -148,6 +148,48 @@ class UserModel(BaseModel):
         else:
             return False, "Ошибка при удалении пользователя"
     
+    def delete_user_with_relations(self, user_id: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Удаляет пользователя и все его отношения из системы."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Сначала удаляем пользователя из хранилища
+        delete_success, delete_message = self.delete_user(user_id)
+        if not delete_success:
+            return delete_success, delete_message
+        
+        # Получаем текущие отношения для нахождения всех связей пользователя
+        success, relationships = self.relationship_model.get_relationships(tenant_id)
+        if not success:
+            return True, f"Пользователь {user_id} удален, но не удалось получить отношения"
+        
+        # Собираем все отношения, где пользователь является субъектом
+        user_relationships = []
+        for tuple_data in relationships.get("tuples", []):
+            subject = tuple_data.get("subject", {})
+            
+            if subject.get("type") == "user" and subject.get("id") == user_id:
+                entity = tuple_data.get("entity", {})
+                relation = tuple_data.get("relation", "")
+                
+                user_relationships.append({
+                    "entity_type": entity.get("type"),
+                    "entity_id": entity.get("id"),
+                    "relation": relation,
+                    "subject_type": "user",
+                    "subject_id": user_id
+                })
+        
+        # Удаляем все отношения пользователя
+        if user_relationships:
+            deleted_count, failed_count, errors = self.relationship_model.delete_multiple_relationships(
+                user_relationships, tenant_id
+            )
+            
+            if failed_count > 0:
+                return True, f"Пользователь {user_id} удален, но {failed_count} из {deleted_count + failed_count} отношений не удалены"
+        
+        return True, f"Пользователь {user_id} и все его отношения успешно удалены"
+    
     def add_user_to_group(self, user_id: str, group_id: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Добавляет пользователя в группу."""
         # Проверяем, существует ли пользователь

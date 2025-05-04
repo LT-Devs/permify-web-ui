@@ -96,6 +96,35 @@ class GroupView(BaseView):
             selected_group = next((group for group in groups if group.get('id') == selected_group_id), None)
             
             if selected_group:
+                # Добавляем кнопку удаления группы в отдельном блоке
+                delete_col1, delete_col2 = st.columns([4, 1])
+                with delete_col1:
+                    st.warning(f"Удаление группы **{selected_group.get('name', selected_group_id)}** приведет к удалению всех её участников и отношений с приложениями.")
+                with delete_col2:
+                    if st.button("🗑️ Удалить группу", key=f"delete_group_{selected_group_id}", type="primary"):
+                        st.session_state["confirm_delete_group"] = selected_group_id
+                        st.rerun()
+                
+                # Подтверждение удаления
+                if "confirm_delete_group" in st.session_state and st.session_state["confirm_delete_group"] == selected_group_id:
+                    st.warning("Вы уверены, что хотите удалить группу? Это действие нельзя отменить.")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Да, удалить", key="confirm_delete_group_yes"):
+                            success, message = self.controller.delete_group(selected_group_id, tenant_id)
+                            if success:
+                                st.success(message)
+                                # Очищаем состояние и перезагружаем страницу
+                                del st.session_state["confirm_delete_group"]
+                                # Перезагружаем страницу для обновления списка
+                                st.rerun()
+                            else:
+                                st.error(message)
+                    with col2:
+                        if st.button("Отмена", key="confirm_delete_group_no"):
+                            del st.session_state["confirm_delete_group"]
+                            st.rerun()
+                
                 tabs = st.tabs(["Участники группы", "Доступ к приложениям"])
                 
                 # Управление участниками группы

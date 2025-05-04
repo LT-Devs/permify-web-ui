@@ -3,7 +3,7 @@ from .base_view import BaseView
 from app.controllers import AppController, UserController, GroupController, RelationshipController
 
 class IndexView(BaseView):
-    """Представление для главной страницы."""
+    """Представление для главной страницы с улучшенным дизайном."""
     
     def __init__(self):
         super().__init__()
@@ -14,8 +14,11 @@ class IndexView(BaseView):
     
     def render(self, skip_status_check=False):
         """Отображает главную страницу с обзором системы."""
-        self.show_header("Система управления доступом Permify", 
-                         "Управление приложениями, пользователями, группами и правами доступа")
+        self.show_header(
+            "Система управления доступом", 
+            "Мониторинг и управление разрешениями для приложений и пользователей",
+            icon="🔐"
+        )
         
         if not skip_status_check and not self.show_status():
             return
@@ -28,112 +31,150 @@ class IndexView(BaseView):
         groups = self.group_controller.get_groups(tenant_id)
         success, relationships = self.relationship_controller.get_relationships(tenant_id)
         
-        # Отображаем статистику в виде метрик
+        # Отображаем статистику в виде улучшенных метрик
         col1, col2, col3, col4 = st.columns(4)
+        
         with col1:
-            st.metric("Объектов", len([app for app in apps if not app.get('is_template', False)]))
+            metric_html = self.render_metric(
+                "Приложения", 
+                len([app for app in apps if not app.get('is_template', False)]),
+                "Активные приложения в системе"
+            )
+            st.markdown(metric_html, unsafe_allow_html=True)
+            
         with col2:
-            st.metric("Пользователей", len(users))
+            metric_html = self.render_metric(
+                "Пользователи", 
+                len(users),
+                "Зарегистрированные пользователи"
+            )
+            st.markdown(metric_html, unsafe_allow_html=True)
+            
         with col3:
-            st.metric("Групп", len(groups))
+            metric_html = self.render_metric(
+                "Группы", 
+                len(groups),
+                "Группы пользователей"
+            )
+            st.markdown(metric_html, unsafe_allow_html=True)
+            
         with col4:
             if success and relationships:
-                st.metric("Отношений", len(relationships.get("tuples", [])))
+                rel_count = len(relationships.get("tuples", []))
+                metric_html = self.render_metric(
+                    "Отношения", 
+                    rel_count,
+                    "Связи между объектами"
+                )
             else:
-                st.metric("Отношений", "N/A")
+                metric_html = self.render_metric(
+                    "Отношения", 
+                    "N/A",
+                    "Связи между объектами"
+                )
+            st.markdown(metric_html, unsafe_allow_html=True)
         
-        # Краткий обзор последних объектов
-        st.subheader("Объекты")
+        # Добавляем разделитель
+        st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
         
-        app_instances = [app for app in apps if not app.get('is_template', False)]
-        if app_instances:
-            # Отображаем только 5 последних объектов
-            display_apps = app_instances[-5:]
+        # Используем две колонки для отображения контента
+        col_left, col_right = st.columns([2, 1])
+        
+        # Краткий обзор последних объектов в левой колонке
+        with col_left:
+            st.subheader("📱 Последние приложения")
             
-            for app in display_apps:
-                with st.container():
-                    st.markdown(
-                        f"""
-                        <div style="
-                            background-color: #1e2025;
-                            padding: 15px;
-                            border-radius: 5px;
-                            margin-bottom: 10px;
-                            border: 1px solid #4e5259;
-                        ">
-                            <h4 style="margin-top: 0; color: #e0e0e0;">{app.get('display_name')} (ID: {app.get('id')})</h4>
-                            <p style="color: #e0e0e0;"><strong>Тип:</strong> {app.get('name')}</p>
-                            <p style="color: #e0e0e0;"><strong>Пользователей:</strong> {len(app.get('users', []))}</p>
-                            <p style="color: #e0e0e0;"><strong>Групп:</strong> {len(app.get('groups', []))}</p>
-                            <p style="color: #e0e0e0;"><strong>Действий:</strong> {len(app.get('actions', []))}</p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
+            app_instances = [app for app in apps if not app.get('is_template', False)]
+            if app_instances:
+                # Отображаем только 5 последних объектов с современным дизайном
+                display_apps = app_instances[-5:]
+                
+                for app in display_apps:
+                    app_type = app.get('name', 'N/A')
+                    users_count = len(app.get('users', []))
+                    groups_count = len(app.get('groups', []))
+                    actions_count = len(app.get('actions', []))
+                    
+                    app_content = f"""
+                    <div>
+                        <strong>Тип:</strong> {app_type}<br>
+                        <strong>Пользователей:</strong> {users_count}<br>
+                        <strong>Групп:</strong> {groups_count}<br>
+                        <strong>Действий:</strong> {actions_count}
+                    </div>
+                    """
+                    
+                    self.render_card(
+                        f"{app.get('display_name')}",
+                        app_content,
+                        icon="📱",
+                        footer=f"ID: {app.get('id')}"
                     )
-            
-            if len(app_instances) > 5:
-                st.info(f"Показаны 5 последних объектов из {len(app_instances)}. Перейдите в раздел 'Объекты' для просмотра всех.")
-        else:
-            st.info("В системе нет объектов. Создайте их в разделе 'Объекты'.")
+                
+                if len(app_instances) > 5:
+                    st.info(f"Показаны 5 последних приложений из {len(app_instances)}. Перейдите в раздел 'Приложения' для просмотра всех.")
+            else:
+                st.info("В системе нет приложений. Создайте их в разделе 'Приложения'.")
         
-        # Краткий обзор последних пользователей
-        st.subheader("Последние пользователи")
-        
-        if users:
-            # Отображаем только 5 последних пользователей
-            display_users = users[-5:]
+        # Краткий обзор последних пользователей и инструкции в правой колонке
+        with col_right:
+            st.subheader("👤 Последние пользователи")
             
-            # Создаем строку для каждого пользователя
-            user_html = ""
-            for user in display_users:
-                user_html += f"""
-                <div style="
-                    display: inline-block;
-                    background-color: #2d3035;
-                    color: #e0e0e0;
-                    padding: 10px 15px;
-                    border-radius: 20px;
-                    margin-right: 10px;
-                    margin-bottom: 10px;
-                    border: 1px solid #4e5259;
-                ">
-                    <span style="font-weight: bold;">👤 {user.get('name', 'Пользователь')}</span> (ID: {user.get('id', 'N/A')})
-                </div>
-                """
+            if users:
+                # Отображаем только 5 последних пользователей
+                display_users = users[-5:]
+                
+                # Создаем строку для каждого пользователя
+                user_html = "<div style='margin-bottom: 1rem;'>"
+                for user in display_users:
+                    user_html += f"""
+                    <div style="
+                        background-color: var(--secondary-bg);
+                        color: var(--text);
+                        padding: 0.5rem 0.75rem;
+                        border-radius: 1rem;
+                        margin-right: 0.5rem;
+                        margin-bottom: 0.5rem;
+                        border: 1px solid var(--border);
+                        display: inline-block;
+                        font-size: 0.9rem;
+                    ">
+                        <span style="font-weight: 500;">👤 {user.get('name', 'Пользователь')}</span>
+                    </div>
+                    """
+                user_html += "</div>"
+                
+                st.markdown(user_html, unsafe_allow_html=True)
+                
+                if len(users) > 5:
+                    st.info(f"Показаны 5 последних пользователей из {len(users)}. Перейдите в раздел 'Пользователи' для просмотра всех.")
+            else:
+                st.info("В системе нет пользователей. Создайте их в разделе 'Пользователи'.")
+                
+            # Добавляем разделитель
+            st.markdown('<div class="divider"></div>', unsafe_allow_html=True)
             
-            st.markdown(f"<div>{user_html}</div>", unsafe_allow_html=True)
+            # Информация о проверке доступа
+            st.subheader("✅ Проверка доступа")
             
-            if len(users) > 5:
-                st.info(f"Показаны 5 последних пользователей из {len(users)}. Перейдите в раздел 'Пользователи' для просмотра всех.")
-        else:
-            st.info("В системе нет пользователей. Создайте их в разделе 'Пользователи'.")
-        
-        # Информация о проверке доступа
-        st.subheader("Проверка доступа")
-        
-        st.markdown(
+            help_content = """
+            <ol style="padding-left: 1.5rem;">
+                <li>Перейдите в раздел <strong>"Проверка доступа"</strong></li>
+                <li>Выберите пользователя, приложение и действие</li>
+                <li>Нажмите кнопку "Проверить доступ"</li>
+                <li>Получите результат проверки</li>
+            </ol>
             """
-            <div style="
-                background-color: #1e2025;
-                padding: 15px;
-                border-radius: 5px;
-                margin-bottom: 10px;
-                border: 1px solid #4e5259;
-                color: #e0e0e0;
-            ">
-                <h4 style="margin-top: 0; color: #e0e0e0;">Как проверить доступ?</h4>
-                <p>1. Перейдите в раздел <strong>"Проверка доступа"</strong> или <strong>"Отношения"</strong></p>
-                <p>2. Выберите пользователя, объект и действие</p>
-                <p>3. Нажмите кнопку "Проверить доступ"</p>
-                <p>4. Получите результат проверки и подробную информацию</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+            
+            self.render_card(
+                "Как проверить доступ?",
+                help_content,
+                icon="❓"
+            )
         
         # Информация о системе
         st.sidebar.markdown("---")
         st.sidebar.markdown("### О системе")
         st.sidebar.markdown("**Permify GUI** - интерфейс для управления разрешениями в Permify")
-        st.sidebar.markdown("Версия: 1.0.0")
-        st.sidebar.markdown("Режим: Разработка") 
+        st.sidebar.markdown("Версия: 2.0.1a")
+        st.sidebar.markdown("Разработчик: BadKiko (LT-Devs)") 

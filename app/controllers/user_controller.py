@@ -30,4 +30,8 @@ class UserController(BaseController):
     
     def remove_app_role(self, user_id, app_type, app_id, role, tenant_id=None):
         """Удаляет роль пользователя в приложении."""
-        return self.user_model.remove_app_role(user_id, app_type, app_id, role, tenant_id) 
+        return self.user_model.remove_app_role(user_id, app_type, app_id, role, tenant_id)
+    
+    def delete_user(self, user_id, tenant_id=None):
+        """Удаляет пользователя и все его отношения в системе."""
+        return self.user_model.delete_user_with_relations(user_id, tenant_id) 

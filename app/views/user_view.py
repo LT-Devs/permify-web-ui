@@ -100,6 +100,35 @@ class UserView(BaseView):
             selected_user = next((user for user in users if user.get('id') == selected_user_id), None)
             
             if selected_user:
+                # Добавляем кнопку удаления пользователя в отдельном блоке
+                delete_col1, delete_col2 = st.columns([4, 1])
+                with delete_col1:
+                    st.warning(f"Удаление пользователя **{selected_user.get('name', selected_user_id)}** приведет к удалению всех его отношений и ролей.")
+                with delete_col2:
+                    if st.button("🗑️ Удалить пользователя", key=f"delete_user_{selected_user_id}", type="primary"):
+                        st.session_state["confirm_delete_user"] = selected_user_id
+                        st.rerun()
+                
+                # Подтверждение удаления
+                if "confirm_delete_user" in st.session_state and st.session_state["confirm_delete_user"] == selected_user_id:
+                    st.warning("Вы уверены, что хотите удалить пользователя? Это действие нельзя отменить.")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Да, удалить", key="confirm_delete_yes"):
+                            success, message = self.controller.delete_user(selected_user_id, tenant_id)
+                            if success:
+                                st.success(message)
+                                # Очищаем состояние и перезагружаем страницу
+                                del st.session_state["confirm_delete_user"]
+                                # Перезагружаем страницу для обновления списка
+                                st.rerun()
+                            else:
+                                st.error(message)
+                    with col2:
+                        if st.button("Отмена", key="confirm_delete_no"):
+                            del st.session_state["confirm_delete_user"]
+                            st.rerun()
+                
                 tabs = st.tabs(["Членство в группах", "Права в приложениях"])
                 
                 # Управление группами

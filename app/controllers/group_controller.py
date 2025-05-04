@@ -34,4 +34,8 @@ class GroupController(BaseController):
     
     def remove_role_from_group(self, group_id, app_type, app_id, role, tenant_id=None):
         """Удаляет роль группы из приложения."""
-        return self.group_model.remove_role_from_group(group_id, app_type, app_id, role, tenant_id) 
+        return self.group_model.remove_role_from_group(group_id, app_type, app_id, role, tenant_id)
+    
+    def delete_group(self, group_id, tenant_id=None):
+        """Удаляет группу и все её отношения в системе."""
+        return self.group_model.delete_group_with_relations(group_id, tenant_id) 

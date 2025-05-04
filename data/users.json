@@ -5,6 +5,12 @@
       "name": "shkolar",
       "groups": [],
       "app_roles": []
+    },
+    {
+      "id": "2",
+      "name": "tereshenko",
+      "groups": [],
+      "app_roles": []
     }
   ]
 }

@@ -398,7 +398,42 @@ class AppView(BaseView):
                     format_func=lambda i: app_options[i][1],
                     key="select_app_to_edit"
                 )
+                
+                # Получаем выбранное приложение
                 selected_app = instances[selected_app_index]
+                
+                # Добавляем кнопку удаления приложения
+                delete_col1, delete_col2 = st.columns([4, 1])
+                with delete_col1:
+                    st.warning(f"Удаление приложения **{selected_app.get('display_name')}** приведет к удалению всех его отношений с пользователями и группами.")
+                with delete_col2:
+                    if st.button("🗑️ Удалить приложение", key=f"delete_app_{selected_app.get('name')}_{selected_app.get('id')}", type="primary"):
+                        st.session_state["confirm_delete_app"] = (selected_app.get('name'), selected_app.get('id'))
+                        st.rerun()
+                
+                # Подтверждение удаления
+                if "confirm_delete_app" in st.session_state and st.session_state["confirm_delete_app"] == (selected_app.get('name'), selected_app.get('id')):
+                    st.warning("Вы уверены, что хотите удалить приложение? Это действие нельзя отменить.")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Да, удалить", key="confirm_delete_app_yes"):
+                            success, message = self.controller.delete_app(
+                                selected_app.get('name'),
+                                selected_app.get('id'),
+                                tenant_id
+                            )
+                            if success:
+                                st.success(message)
+                                # Очищаем состояние и перезагружаем страницу
+                                del st.session_state["confirm_delete_app"]
+                                # Перезагружаем страницу для обновления списка
+                                st.rerun()
+                            else:
+                                st.error(message)
+                    with col2:
+                        if st.button("Отмена", key="confirm_delete_app_no"):
+                            del st.session_state["confirm_delete_app"]
+                            st.rerun()
                 
                 with st.expander("Редактирование действий объекта", expanded=True):
                     # Инициализируем session_state для редактирования

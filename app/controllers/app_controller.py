@@ -45,6 +45,10 @@ class AppController(BaseController):
         """Обновляет существующее приложение и его действия."""
         return self.app_model.update_app(app_type, app_id, actions, tenant_id, metadata)
     
+    def delete_app(self, app_type: str, app_id: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Удаляет приложение полностью из системы."""
+        return self.app_model.delete_app(app_type, app_id, tenant_id)
+    
     def get_all_custom_relations(self) -> List[str]:
         """Возвращает список всех пользовательских типов отношений из всех приложений."""
         return self.app_model.get_all_custom_relations()

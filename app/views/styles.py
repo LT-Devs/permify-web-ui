@@ -1,141 +1,339 @@
 """Модуль для хранения общих стилей CSS для приложения."""
 
-# Стили для темного режима
-DARK_MODE_STYLES = """
+# Стили для современного Streamlit-приложения
+MODERN_STYLES = """
 <style>
-/* Улучшаем контрастность текста и фона для темного режима */
-input[type="text"] {
-    color: #e0e0e0 !important; 
-    background-color: #2d3035 !important;
-    border: 1px solid #4e5259 !important;
+/* Основные переменные */
+:root {
+    --primary: #4A90E2;
+    --primary-light: #6ba5e8;
+    --primary-dark: #3a72b4;
+    --success: #28a745;
+    --info: #17a2b8;
+    --warning: #ffc107;
+    --danger: #dc3545;
+    --light: #f8f9fa;
+    --dark: #1a1c22;
+    --secondary-bg: #262930;
+    --border: #494c56;
+    --text: #F0F2F6;
+    --text-secondary: #c2c5d1;
+    --radius: 0.5rem;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --transition: all 0.2s ease;
 }
 
+/* Принудительное расширение всех контейнеров Streamlit */
+div[data-testid="stVerticalBlock"] > div:first-child {
+    max-width: 100% !important;
+    width: 100% !important;
+}
+
+/* Глобальное принудительное расширение */
+.stApp > header + div > div {
+    max-width: 100% !important;
+}
+
+div[data-testid="stAppViewContainer"] > div > div > div {
+    max-width: 100% !important;
+}
+
+/* Увеличение максимальной ширины контейнера */
+.block-container {
+    max-width: 98% !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+}
+
+/* Принудительное увеличение ширины основного контейнера */
+.css-18e3th9 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    max-width: none !important;
+}
+
+/* Расширение содержимого на всю доступную ширину */
+.css-1y4p8pa {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* Полная ширина для всех внутренних контейнеров */
+.css-1r6slb0, .css-keje6w, .css-1l4w6pd, .css-1offfwp {
+    max-width: 100% !important;
+    width: 100% !important;
+}
+
+/* Расширение контейнеров таблиц */
+.stDataFrame, .css-1jgnl, .css-1xarl3l {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* Настройка внутренних отступов контейнеров */
+.css-1kyxreq {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+}
+
+/* Улучшение использования пространства в макете */
+.main .block-container {
+    padding-top: 2rem !important;
+    max-width: 98% !important;
+}
+
+/* Подстройка ширины сайдбара */
+.css-1d391kg {
+    width: 14rem !important;
+}
+
+/* Улучшение основных элементов UI */
+.stButton button {
+    border-radius: var(--radius) !important;
+    font-weight: 500 !important;
+    box-shadow: var(--shadow) !important;
+    transition: var(--transition) !important;
+    border: none !important;
+    padding: 0.5rem 1rem !important;
+    margin-bottom: 0.5rem !important;
+}
+
+.stButton button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Стили для основных кнопок */
+.stButton button[kind="primary"] {
+    background-color: var(--primary) !important;
+    color: white !important;
+}
+
+/* Стили для полей ввода */
+input[type="text"], textarea, .stTextInput > div > div {
+    border-radius: var(--radius) !important;
+    border: 1px solid var(--border) !important;
+    background-color: var(--secondary-bg) !important;
+    color: var(--text) !important;
+    transition: var(--transition) !important;
+}
+
+input[type="text"]:focus, textarea:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.25) !important;
+}
+
+/* Улучшение выпадающих списков */
+.stSelectbox > div > div {
+    border-radius: var(--radius) !important;
+    border: 1px solid var(--border) !important;
+    background-color: var(--secondary-bg) !important;
+    color: var(--text) !important;
+}
+
+/* Улучшение аккордеонов и экспандеров */
+.stExpander {
+    border: 1px solid var(--border) !important;
+    border-radius: var(--radius) !important;
+    background-color: var(--secondary-bg) !important;
+    margin-bottom: 1rem !important;
+    overflow: hidden !important;
+}
+
+.stExpander > div:first-child {
+    background-color: var(--secondary-bg) !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 0.75rem 1rem !important;
+}
+
+/* Улучшение таблиц */
 .dataframe {
-    background-color: #2d3035 !important;
-    color: #e0e0e0 !important;
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    border-radius: var(--radius) !important;
+    overflow: hidden !important;
+    width: 100% !important;
+    margin-bottom: 1rem !important;
+    border: 1px solid var(--border) !important;
 }
 
 .dataframe th {
-    background-color: #1e2025 !important;
-    color: #e0e0e0 !important;
-    font-weight: bold !important;
+    background-color: var(--secondary-bg) !important;
+    color: var(--text) !important;
+    font-weight: 600 !important;
+    padding: 0.75rem 1rem !important;
+    text-align: left !important;
+    border-bottom: 2px solid var(--border) !important;
 }
 
 .dataframe td {
-    background-color: #2d3035 !important;
-    color: #e0e0e0 !important;
+    padding: 0.75rem 1rem !important;
+    border-bottom: 1px solid var(--border) !important;
+    color: var(--text) !important;
+    background-color: var(--dark) !important;
 }
 
-/* Улучшаем видимость в темном режиме */
-.stSelectbox label, .stTextInput label, .stCheckbox label {
-    color: #e0e0e0 !important;
-    font-weight: bold !important;
+.dataframe tr:last-child td {
+    border-bottom: none !important;
 }
 
-.stSelectbox > div > div {
-    background-color: #2d3035 !important;
-    color: #e0e0e0 !important;
-    border: 1px solid #4e5259 !important;
+.dataframe tbody tr:hover td {
+    background-color: rgba(74, 144, 226, 0.1) !important;
 }
 
-/* Улучшаем внешний вид чекбоксов */
-.stCheckbox {
-    background-color: #2d3035;
-    padding: 6px 10px;
-    border-radius: 5px;
-    margin-bottom: 4px;
+/* Стили для компонентов-карточек */
+.card {
+    background-color: var(--secondary-bg) !important;
+    border-radius: var(--radius) !important;
+    border: 1px solid var(--border) !important;
+    padding: 1.25rem !important;
+    margin-bottom: 1rem !important;
+    box-shadow: var(--shadow) !important;
+    transition: var(--transition) !important;
 }
 
-/* Улучшаем видимость меток чекбоксов */
-.stCheckbox label span {
-    color: #e0e0e0 !important;
-    font-weight: normal !important;
+.card:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15) !important;
 }
 
-/* Улучшаем контрастность кнопок в темном режиме */
-.stButton button {
-    background-color: #3d4045 !important;
-    color: #e0e0e0 !important;
-    border: 1px solid #4e5259 !important;
+.card-title {
+    color: var(--text) !important;
+    font-size: 1.25rem !important;
+    font-weight: 600 !important;
+    margin-bottom: 0.75rem !important;
 }
 
-/* Стиль для основных кнопок */
-.stButton button[kind="primary"] {
-    background-color: #4257b2 !important;
-    color: #ffffff !important;
-    border: none !important;
+.card-subtitle {
+    color: var(--text-secondary) !important;
+    font-size: 0.9rem !important;
+    margin-bottom: 1rem !important;
 }
 
-/* Стиль для информационных сообщений */
-.stAlert {
-    background-color: #2d3035 !important;
-    color: #e0e0e0 !important;
-    border: 1px solid #4e5259 !important;
+.card-content {
+    color: var(--text) !important;
 }
 
-/* Стиль для заголовков */
-.stMarkdown h3, .stMarkdown h4 {
-    color: #e0e0e0 !important;
+/* Стили для бейджей и меток */
+.badge {
+    display: inline-block !important;
+    padding: 0.35rem 0.65rem !important;
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    line-height: 1 !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+    vertical-align: baseline !important;
+    border-radius: 10rem !important;
+    margin-right: 0.5rem !important;
 }
 
-/* Стиль для контейнеров */
-.stExpander {
-    background-color: #1e2025 !important;
-    border: 1px solid #4e5259 !important;
+.badge-primary {
+    background-color: var(--primary) !important;
+    color: white !important;
 }
 
-/* Стиль для контейнеров элементов */
-.element-container {
-    margin-bottom: 1rem;
+.badge-success {
+    background-color: var(--success) !important;
+    color: white !important;
 }
 
-/* Стили для формы создания объекта */
+.badge-info {
+    background-color: var(--info) !important;
+    color: white !important;
+}
+
+.badge-warning {
+    background-color: var(--warning) !important;
+    color: black !important;
+}
+
+.badge-danger {
+    background-color: var(--danger) !important;
+    color: white !important;
+}
+
+/* Стили для визуальных разделителей */
+.divider {
+    height: 1px !important;
+    background-color: var(--border) !important;
+    margin: 1.5rem 0 !important;
+}
+
+/* Кастомные стили для компонентов с действиями */
 .actions-container {
-    background-color: #1e2025;
-    padding: 15px;
-    border-radius: 5px;
-    margin-top: 10px;
-    margin-bottom: 15px;
-    border: 1px solid #4e5259;
+    background-color: var(--secondary-bg) !important;
+    border-radius: var(--radius) !important;
+    border: 1px solid var(--border) !important;
+    padding: 1.25rem !important;
+    margin-bottom: 1.5rem !important;
+    box-shadow: var(--shadow) !important;
 }
 
-/* Стиль для действий в форме */
 .action-row {
-    background-color: #2d3035;
-    border-radius: 5px;
-    padding: 8px;
-    margin-bottom: 8px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.3);
-    border: 1px solid #4e5259;
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    border-radius: var(--radius) !important;
+    padding: 1rem !important;
+    margin-bottom: 0.75rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-/* Стиль для заголовка таблицы */
-.perm-header {
-    background-color: #1e2025;
-    padding: 8px 12px;
-    border-radius: 5px;
-    margin-bottom: 12px;
-    font-weight: bold;
-    color: #e0e0e0;
+/* Улучшенные уведомления */
+.stAlert {
+    border-radius: var(--radius) !important;
+    border: none !important;
+    padding: 1rem !important;
+    margin-bottom: 1rem !important;
+    box-shadow: var(--shadow) !important;
 }
 
-/* Стиль для контейнеров отношений */
-.relation-card {
-    background-color: #1e2025;
-    padding: 15px;
-    border-radius: 5px;
-    margin-bottom: 15px;
-    border: 1px solid #4e5259;
+/* Улучшение метрик */
+.stMetric {
+    background-color: var(--secondary-bg) !important;
+    border-radius: var(--radius) !important;
+    padding: 1rem !important;
+    box-shadow: var(--shadow) !important;
+    border: 1px solid var(--border) !important;
 }
 
-/* Подсветка строк в таблицах при наведении */
-.dataframe tbody tr:hover {
-    background-color: #3d4045 !important;
+.stMetric label {
+    color: var(--text-secondary) !important;
+    font-weight: 500 !important;
+}
+
+.stMetric .metric-value {
+    color: var(--text) !important;
+    font-size: 2rem !important;
+    font-weight: 700 !important;
+}
+
+/* Улучшение отзывчивости колонок */
+@media only screen and (max-width: 768px) {
+    .block-container {
+        max-width: 100% !important;
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+    
+    .css-18e3th9 {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+    }
+    
+    .css-1y4p8pa {
+        padding-left: 0px !important;
+        padding-right: 0px !important;
+    }
 }
 </style>
 """
 
-# Основная функция для получения стилей
+# Добавляем методы для экспорта стилей
+def get_modern_styles():
+    """Возвращает современные CSS-стили для приложения."""
+    return MODERN_STYLES
+
+# Для обратной совместимости
 def get_dark_mode_styles():
-    """Возвращает CSS-стили для темного режима."""
-    return DARK_MODE_STYLES 
+    """Возвращает CSS-стили для темного режима (устарело)."""
+    return MODERN_STYLES 

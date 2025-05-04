@@ -546,20 +546,66 @@ class AppModel(BaseModel):
     
     def get_all_custom_relations(self) -> List[str]:
         """Возвращает список всех пользовательских типов отношений из всех приложений."""
+        # Загружаем приложения из файла
         stored_apps = self._load_apps()
-        custom_relations = set()
         
-        # Собираем пользовательские отношения из метаданных приложений
+        # Собираем все пользовательские отношения
+        all_relations = []
         for app in stored_apps:
             if 'metadata' in app and 'custom_relations' in app.get('metadata', {}):
                 for relation in app.get('metadata', {}).get('custom_relations', []):
-                    custom_relations.add(relation)
-            
-            # Также проверяем действия на наличие пользовательских отношений
-            for action in app.get('actions', []):
-                for key in action.keys():
-                    if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed", "group_allowed"]:
-                        relation = key.replace("_allowed", "")
-                        custom_relations.add(relation)
+                    if relation not in all_relations:
+                        all_relations.append(relation)
         
-        return list(custom_relations) 
+        return all_relations
+        
+    def delete_app(self, app_type: str, app_id: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Удаляет приложение и все его отношения из системы."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Сначала удаляем приложение из хранилища
+        apps = self._load_apps()
+        app_key = f"{app_type}:{app_id}"
+        
+        # Фильтруем список приложений
+        filtered_apps = [app for app in apps if not (app.get('name') == app_type and app.get('id') == app_id)]
+        
+        if len(filtered_apps) == len(apps):
+            return False, f"Приложение {app_type}:{app_id} не найдено"
+        
+        # Сохраняем обновленный список приложений
+        if not self._save_apps(filtered_apps):
+            return False, f"Ошибка при удалении приложения {app_type}:{app_id}"
+        
+        # Получаем текущие отношения для нахождения всех связей приложения
+        success, relationships = self.relationship_model.get_relationships(tenant_id)
+        if not success:
+            return True, f"Приложение {app_type}:{app_id} удалено, но не удалось получить отношения"
+        
+        # Собираем все отношения, где приложение является сущностью
+        app_relationships = []
+        for tuple_data in relationships.get("tuples", []):
+            entity = tuple_data.get("entity", {})
+            
+            if entity.get("type") == app_type and entity.get("id") == app_id:
+                subject = tuple_data.get("subject", {})
+                relation = tuple_data.get("relation", "")
+                
+                app_relationships.append({
+                    "entity_type": app_type,
+                    "entity_id": app_id,
+                    "relation": relation,
+                    "subject_type": subject.get("type"),
+                    "subject_id": subject.get("id")
+                })
+        
+        # Удаляем все отношения приложения
+        if app_relationships:
+            deleted_count, failed_count, errors = self.relationship_model.delete_multiple_relationships(
+                app_relationships, tenant_id
+            )
+            
+            if failed_count > 0:
+                return True, f"Приложение {app_type}:{app_id} удалено, но {failed_count} из {deleted_count + failed_count} отношений не удалены"
+        
+        return True, f"Приложение {app_type}:{app_id} и все его отношения успешно удалены" 
