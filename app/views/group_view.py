@@ -161,21 +161,61 @@ class GroupView(BaseView):
                         app_memberships = selected_group.get('app_memberships', [])
                         
                         if app_memberships:
+                            # Показываем роли в приложениях в виде таблицы
+                            membership_data = []
+                            
                             for app_membership in app_memberships:
                                 app_type = app_membership.get('app_type')
                                 app_id = app_membership.get('app_id')
+                                role = app_membership.get('role', 'viewer')  # по умолчанию viewer, если роль не указана
                                 
-                                col_a, col_b = st.columns([4, 1])
-                                with col_a:
-                                    app_display = next((app.get('display_name', app.get('name')) for app in apps if app.get('name') == app_type and app.get('id') == app_id), f"{app_type}")
-                                    st.write(f"- {app_display} (ID: {app_id})")
-                                with col_b:
-                                    if st.button("Удалить", key=f"remove_app_{selected_group_id}_{app_type}_{app_id}"):
+                                # Находим название приложения
+                                app_display = next((app.get('display_name', app.get('name')) 
+                                                  for app in apps if app.get('name') == app_type and app.get('id') == app_id), 
+                                                 f"{app_type}")
+                                
+                                # Преобразуем роль в более читабельный формат
+                                role_display = {
+                                    "owner": "👑 Владелец",
+                                    "editor": "✏️ Редактор",
+                                    "viewer": "👁️ Просмотрщик"
+                                }.get(role, f"🔧 {role.capitalize()}")
+                                
+                                membership_data.append({
+                                    "Приложение": f"{app_display} (ID: {app_id})",
+                                    "Роль": role_display,
+                                    "_app_type": app_type,
+                                    "_app_id": app_id,
+                                    "_role": role
+                                })
+                            
+                            # Показываем таблицу ролей
+                            st.dataframe(
+                                pd.DataFrame(membership_data).drop(columns=["_app_type", "_app_id", "_role"]),
+                                use_container_width=True,
+                                hide_index=True
+                            )
+                            
+                            # Форма для удаления доступа
+                            with st.expander("Удалить доступ к приложению"):
+                                if membership_data:
+                                    selected_membership_index = st.selectbox(
+                                        "Выберите приложение для удаления доступа",
+                                        range(len(membership_data)),
+                                        format_func=lambda i: f"{membership_data[i]['Приложение']} ({membership_data[i]['Роль']})",
+                                        key=f"membership_to_remove_{selected_group_id}"
+                                    )
+                                    
+                                    if st.button("❌ Удалить доступ", key=f"remove_access_{selected_group_id}", type="primary"):
+                                        app_type = membership_data[selected_membership_index]["_app_type"]
+                                        app_id = membership_data[selected_membership_index]["_app_id"]
+                                        role = membership_data[selected_membership_index]["_role"]
+                                        
                                         success, message = self.controller.remove_group_from_app(
-                                            selected_group_id, app_type, app_id, tenant_id
+                                            selected_group_id, app_type, app_id, role, tenant_id
                                         )
                                         if success:
-                                            st.success(f"Доступ к приложению удален")
+                                            st.success(f"Доступ группы к приложению удален")
                                             st.rerun()
                                         else:
                                             st.error(message)
@@ -185,52 +225,105 @@ class GroupView(BaseView):
                     with col2:
                         st.subheader("Предоставить доступ к приложению")
                         
-                        # Фильтруем приложения, исключая шаблоны
-                        app_instances = [app for app in apps 
-                                       if not app.get('is_template', False) and app.get('id')]
+                        # Инициализируем состояние для отображения формы
+                        if 'show_app_access_form' not in st.session_state:
+                            st.session_state.show_app_access_form = False
                         
-                        if app_instances:
-                            # Создаем список приложений для выбора
-                            app_options = []
-                            for app in app_instances:
-                                # Проверяем, имеет ли группа уже доступ к этому приложению
-                                already_has_access = any(
-                                    membership.get('app_type') == app.get('name') and 
-                                    membership.get('app_id') == app.get('id')
-                                    for membership in app_memberships
-                                )
-                                
-                                if not already_has_access:
-                                    app_options.append({
-                                        "display": f"{app.get('display_name')} (ID: {app.get('id')})",
-                                        "name": app.get('name'),
-                                        "id": app.get('id')
-                                    })
+                        # Кнопка для отображения формы
+                        if not st.session_state.show_app_access_form:
+                            if st.button("➕ Добавить доступ", key=f"add_access_btn_{selected_group_id}", type="primary"):
+                                st.session_state.show_app_access_form = True
+                                st.rerun()
+                        
+                        # Отображаем форму, если нужно
+                        if st.session_state.show_app_access_form:
+                            # Фильтруем приложения, исключая шаблоны
+                            app_instances = [app for app in apps 
+                                       if not app.get('is_template', False) and app.get('id')]
                             
-                            if app_options:
-                                selected_app_index = st.selectbox(
-                                    "Выберите приложение",
-                                    range(len(app_options)),
-                                    format_func=lambda i: app_options[i]["display"],
-                                    key=f"app_select_for_group"
-                                )
-                                
-                                if st.button("Предоставить доступ", key=f"grant_access_{selected_group_id}", type="primary"):
-                                    selected_app = app_options[selected_app_index]
-                                    success, message = self.controller.assign_group_to_app(
-                                        selected_group_id,
-                                        selected_app["name"],
-                                        selected_app["id"],
-                                        tenant_id
+                            if app_instances:
+                                # Создаем список приложений для выбора
+                                app_options = []
+                                for app in app_instances:
+                                    # Проверяем, имеет ли группа уже доступ к этому приложению
+                                    already_has_access = any(
+                                        membership.get('app_type') == app.get('name') and 
+                                        membership.get('app_id') == app.get('id')
+                                        for membership in app_memberships
                                     )
-                                    if success:
-                                        st.success(f"Доступ к приложению предоставлен")
+                                    
+                                    if not already_has_access:
+                                        app_options.append({
+                                            "display": f"{app.get('display_name', app.get('name'))} (ID: {app.get('id')})",
+                                            "name": app.get('name'),
+                                            "id": app.get('id')
+                                        })
+                                
+                                if app_options:
+                                    # Выбор приложения
+                                    selected_app_index = st.selectbox(
+                                        "Выберите приложение",
+                                        range(len(app_options)),
+                                        format_func=lambda i: app_options[i]["display"],
+                                        key=f"app_select_for_group_{selected_group_id}"
+                                    )
+                                    selected_app = app_options[selected_app_index]
+                                    
+                                    # Выбор роли для группы
+                                    role_options = [
+                                        ("viewer", "👁️ Просмотрщик (только чтение)"),
+                                        ("editor", "✏️ Редактор (может изменять)"),
+                                        ("owner", "👑 Владелец (полный доступ)")
+                                    ]
+                                    
+                                    # Получаем приложение для проверки пользовательских ролей
+                                    app_info = next((app for app in apps if app.get('name') == selected_app["name"] and app.get('id') == selected_app["id"]), {})
+                                    
+                                    # Добавляем пользовательские роли, если они есть
+                                    if 'metadata' in app_info and 'custom_relations' in app_info.get('metadata', {}):
+                                        for relation in app_info.get('metadata', {}).get('custom_relations', []):
+                                            role_options.append((relation, f"🔧 {relation.capitalize()}"))
+                                    
+                                    # Выбор роли
+                                    selected_role_index = st.selectbox(
+                                        "Выберите роль для группы",
+                                        range(len(role_options)),
+                                        format_func=lambda i: role_options[i][1],
+                                        key=f"role_select_{selected_group_id}"
+                                    )
+                                    selected_role = role_options[selected_role_index][0]
+                                    
+                                    # Кнопки действий
+                                    col_btn1, col_btn2 = st.columns(2)
+                                    with col_btn1:
+                                        if st.button("Отмена", key=f"cancel_access_{selected_group_id}"):
+                                            st.session_state.show_app_access_form = False
+                                            st.rerun()
+                                    
+                                    with col_btn2:
+                                        if st.button("Сохранить", key=f"save_access_{selected_group_id}", type="primary"):
+                                            success, message = self.controller.assign_role_to_group(
+                                                selected_group_id,
+                                                selected_app["name"],
+                                                selected_app["id"],
+                                                selected_role,
+                                                tenant_id
+                                            )
+                                            if success:
+                                                st.success(f"Группе назначена роль: {role_options[selected_role_index][1]}")
+                                                st.session_state.show_app_access_form = False
+                                                st.rerun()
+                                            else:
+                                                st.error(message)
+                                else:
+                                    st.info("Нет доступных приложений для предоставления доступа")
+                                    if st.button("Закрыть", key=f"close_form_{selected_group_id}"):
+                                        st.session_state.show_app_access_form = False
                                         st.rerun()
-                                    else:
-                                        st.error(message)
                             else:
-                                st.info("Нет доступных приложений для предоставления доступа")
-                        else:
-                            st.info("Нет доступных приложений")
+                                st.info("Нет доступных приложений")
+                                if st.button("Закрыть", key=f"close_form_no_apps_{selected_group_id}"):
+                                    st.session_state.show_app_access_form = False
+                                    st.rerun()
             else:
                 st.warning("Группа не найдена") 

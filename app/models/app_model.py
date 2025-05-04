@@ -521,7 +521,10 @@ class AppModel(BaseModel):
     
     def assign_group_to_app(self, app_name: str, app_id: str, group_id: str, role: str = "viewer", tenant_id: str = None) -> Tuple[bool, str]:
         """Назначает группу приложению с определенной ролью."""
-        success, result = self.relationship_model.assign_group_to_app(app_name, app_id, group_id, role, tenant_id)
+        from app.models.group_model import GroupModel
+        group_model = GroupModel()
+        
+        success, result = group_model.assign_role_to_group(group_id, app_name, app_id, role, tenant_id)
         
         if success:
             # После назначения группы обновляем схему
@@ -532,7 +535,10 @@ class AppModel(BaseModel):
     
     def remove_group_from_app(self, app_name: str, app_id: str, group_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Удаляет группу из приложения с определенной ролью."""
-        return self.relationship_model.delete_relationship(app_name, app_id, role, "group", group_id, tenant_id)
+        from app.models.group_model import GroupModel
+        group_model = GroupModel()
+        
+        return group_model.remove_role_from_group(group_id, app_name, app_id, role, tenant_id)
     
     def check_user_permission(self, app_name: str, app_id: str, user_id: str, action: str, tenant_id: str = None) -> Tuple[bool, Any]:
         """Проверяет разрешение пользователя на действие в приложении."""

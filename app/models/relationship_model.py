@@ -238,6 +238,7 @@ class RelationshipModel(BaseModel):
                     
                     # Проверяем доступ через каждую группу
                     for group_id in user_groups:
+                        # Проверяем права напрямую для каждой группы
                         group_data = {
                             "metadata": {
                                 "snap_token": "",
@@ -257,8 +258,18 @@ class RelationshipModel(BaseModel):
                         # Если хотя бы одна группа имеет доступ, разрешаем
                         if group_success and (group_result.get("can") == True or group_result.get("can") == "CHECK_RESULT_ALLOWED"):
                             result["can"] = True
-                            result["metadata"]["reason"] = f"Access granted via group membership (group: {group_id})"
+                            result["metadata"]["reason"] = f"Доступ предоставлен через членство в группе (группа: {group_id})"
                             break
+                        
+                        # Проверяем каждую роль группы для данного приложения
+                        group_roles = self.get_group_roles(group_id, entity_type, entity_id, tenant_id)
+                        for role in group_roles:
+                            # Для каждой роли проверяем, дает ли она доступ к нужному действию
+                            has_permission = self.check_role_permission(entity_type, entity_id, permission, role, tenant_id, schema_version)
+                            if has_permission:
+                                result["can"] = True
+                                result["metadata"]["reason"] = f"Доступ предоставлен через роль {role} группы (группа: {group_id})"
+                                break
             
             return success, result
         except Exception as e:
@@ -294,6 +305,16 @@ class RelationshipModel(BaseModel):
         """Добавляет пользователя в группу (создает отношение group-member-user)."""
         return self.create_relationship("group", group_id, "member", "user", user_id, tenant_id)
     
+    def assign_role_to_group(self, group_id: str, app_name: str, app_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Назначает группе роль в приложении (owner, editor, viewer и пользовательские роли)."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Используем префикс group_ для отношений группы
+        group_role = f"group_{role}"
+        
+        # Создаем отношение
+        return self.create_relationship(app_name, app_id, group_role, "group", group_id, tenant_id)
+    
     def assign_user_to_app(self, app_name: str, app_id: str, user_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Назначает пользователю роль в приложении (owner, editor, viewer и пользовательские роли)."""
         # Стандартные роли
@@ -324,13 +345,6 @@ class RelationshipModel(BaseModel):
         
         return self.create_relationship(app_name, app_id, role, "user", user_id, tenant_id)
     
-    def assign_group_to_app(self, app_name: str, app_id: str, group_id: str, role: str = "viewer", tenant_id: str = None) -> Tuple[bool, str]:
-        """Назначает группу приложению с определенной ролью."""
-        tenant_id = tenant_id or self.default_tenant
-        
-        # Используем стандартную роль вместо фиксированного "member"
-        return self.create_relationship(app_name, app_id, role, "group", group_id, tenant_id)
-    
     def delete_multiple_relationships(self, relationships: List[Dict[str, str]], tenant_id: str = None) -> Tuple[int, int, List[str]]:
         """Удаляет несколько отношений."""
         tenant_id = tenant_id or self.default_tenant
@@ -355,4 +369,61 @@ class RelationshipModel(BaseModel):
                 error_count += 1
                 results.append(f"Ошибка удаления {entity_type}:{entity_id} → {relation} → {subject_type}:{subject_id}: {message}")
         
-        return success_count, error_count, results 
+        return success_count, error_count, results
+    
+    def get_group_roles(self, group_id: str, entity_type: str, entity_id: str, tenant_id: str = None) -> List[str]:
+        """Получает список ролей группы для конкретного приложения."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Получаем все отношения
+        success, relationships = self.get_relationships(tenant_id)
+        if not success:
+            return []
+        
+        # Ищем роли группы для указанного приложения
+        group_roles = []
+        for tuple_data in relationships.get("tuples", []):
+            entity = tuple_data.get("entity", {})
+            subject = tuple_data.get("subject", {})
+            relation = tuple_data.get("relation", "")
+            
+            # Проверяем, что это отношение между приложением и группой
+            if (entity.get("type") == entity_type and 
+                entity.get("id") == entity_id and
+                subject.get("type") == "group" and
+                subject.get("id") == group_id):
+                
+                group_roles.append(relation)
+        
+        return group_roles
+    
+    def check_role_permission(self, entity_type: str, entity_id: str, permission: str, role: str, 
+                             tenant_id: str = None, schema_version: str = None) -> bool:
+        """Проверяет, дает ли указанная роль доступ к определенному действию."""
+        # Получаем текущую схему для анализа правил
+        from .schema_model import SchemaModel
+        schema_model = SchemaModel()
+        
+        success, schema = schema_model.get_current_schema(tenant_id, schema_version)
+        if not success or not schema:
+            return False
+        
+        # Анализируем схему для поиска правила
+        entities_info = schema_model.extract_entities_info(schema)
+        
+        # Проверяем, существует ли сущность и действие
+        if entity_type not in entities_info:
+            return False
+        
+        entity_def = entities_info[entity_type].get("definition", {})
+        actions = entity_def.get("actions", {})
+        
+        # Проверяем действие
+        if permission not in actions:
+            return False
+        
+        # Анализируем правило для действия
+        permission_rule = actions.get(permission, {}).get("rewrite", "")
+        
+        # Простая проверка: содержит ли правило имя роли
+        return role in permission_rule 

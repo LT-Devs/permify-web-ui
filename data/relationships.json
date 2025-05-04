@@ -2,36 +2,24 @@
   "tuples": [
     {
       "entity": {
-        "type": "Testing",
-        "id": "1"
-      },
-      "relation": "viewer",
-      "subject": {
-        "type": "group",
-        "id": "1",
-        "relation": ""
-      }
-    },
-    {
-      "entity": {
-        "type": "Testing",
-        "id": "1"
-      },
-      "relation": "t1",
-      "subject": {
-        "type": "group",
-        "id": "1",
-        "relation": ""
-      }
-    },
-    {
-      "entity": {
         "type": "group",
         "id": "1"
       },
       "relation": "member",
       "subject": {
         "type": "user",
+        "id": "1",
+        "relation": ""
+      }
+    },
+    {
+      "entity": {
+        "type": "petitions",
+        "id": "1"
+      },
+      "relation": "group_viewer",
+      "subject": {
+        "type": "group",
         "id": "1",
         "relation": ""
       }

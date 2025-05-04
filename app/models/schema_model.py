@@ -140,7 +140,11 @@ class SchemaModel(BaseModel):
             
             # Добавляем отношения
             for relation in entity_data["relations"]:
-                schema_content += f"  relation {relation} @user\n"
+                # Если это отношение для пользователей, добавляем также и для групп
+                if relation in ["owner", "editor", "viewer"] or entity_name in ["permissions", "petitions", "oodiks"]:
+                    schema_content += f"  relation {relation} @user @group\n"
+                else:
+                    schema_content += f"  relation {relation} @user\n"
             
             # Добавляем стандартные действия
             standard_actions = ["view", "edit", "create", "delete"]
@@ -148,7 +152,13 @@ class SchemaModel(BaseModel):
                 if len(entity_data["relations"]) > 0:
                     # Используем первое отношение как стандартное для действий
                     first_relation = entity_data["relations"][0]
-                    schema_content += f"  action {action} = {first_relation}\n"
+                    
+                    # Проверяем групповые права
+                    if entity_name not in ["user", "group"]:
+                        # Используем синтаксис "and" и "or" для связывания правил
+                        schema_content += f"  action {action} = {first_relation} or group.member and group.{first_relation}\n"
+                    else:
+                        schema_content += f"  action {action} = {first_relation}\n"
             
             schema_content += "}\n\n"
         
@@ -310,6 +320,14 @@ class SchemaModel(BaseModel):
             group_model = GroupModel()
             groups = group_model.get_groups(tenant_id)
             
+            # Загружаем текущие отношения для анализа ролей групп
+            from .relationship_model import RelationshipModel
+            relationship_model = RelationshipModel()
+            success, relationships_data = relationship_model.get_relationships(tenant_id)
+            
+            if not success:
+                return False, "Не удалось получить отношения для генерации схемы"
+            
             # Преобразуем список групп в словарь для удобства
             groups_dict = {group.get('id'): group for group in groups}
             
@@ -332,19 +350,21 @@ class SchemaModel(BaseModel):
                 
                 schema_content += f"entity {app_name} {{\n"
                 
-                # Добавляем стандартные отношения
+                # Добавляем отношения для пользователей
                 schema_content += "  relation owner @user\n"
                 schema_content += "  relation editor @user\n"
                 schema_content += "  relation viewer @user\n"
-                schema_content += "  relation owner @group\n"  # Добавляем роли для групп
-                schema_content += "  relation editor @group\n"
-                schema_content += "  relation viewer @group\n"
                 
-                # Добавляем пользовательские отношения
+                # Добавляем отношения для групп
+                schema_content += "  relation group_owner @group\n"
+                schema_content += "  relation group_editor @group\n"
+                schema_content += "  relation group_viewer @group\n"
+                
+                # Добавляем пользовательские отношения для пользователей и групп
                 custom_relations = app.get('metadata', {}).get('custom_relations', [])
                 for relation in custom_relations:
                     schema_content += f"  relation {relation} @user\n"
-                    schema_content += f"  relation {relation} @group\n"  # Добавляем роли для групп
+                    schema_content += f"  relation group_{relation} @group\n"
                 
                 # Пустая строка между отношениями и действиями
                 schema_content += "\n"
@@ -357,12 +377,15 @@ class SchemaModel(BaseModel):
                     
                     # Формируем правило для действия
                     rule_parts = ["owner"]  # владелец всегда имеет все права
+                    group_rule_parts = ["group_owner.member"]  # групповые права для владельца
                     
                     # Добавляем стандартные роли
                     if action.get('editor_allowed', False):
                         rule_parts.append("editor")
+                        group_rule_parts.append("group_editor.member")
                     if action.get('viewer_allowed', False):
                         rule_parts.append("viewer")
+                        group_rule_parts.append("group_viewer.member")
                     
                     # Добавляем пользовательские роли
                     for key, value in action.items():
@@ -370,9 +393,12 @@ class SchemaModel(BaseModel):
                             relation = key.replace("_allowed", "")
                             if relation in custom_relations:
                                 rule_parts.append(relation)
+                                group_rule_parts.append(f"group_{relation}.member")
                     
-                    # Объединяем части правила с "or"
-                    rule = " or ".join(rule_parts)
+                    # Объединяем все правила с "or"
+                    all_rules = rule_parts + group_rule_parts
+                    rule = " or ".join(all_rules)
+                    
                     schema_content += f"  action {action_name} = {rule}\n"
                 
                 # Закрываем блок приложения

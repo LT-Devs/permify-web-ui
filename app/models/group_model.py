@@ -51,6 +51,7 @@ class GroupModel(BaseModel):
             for tuple_data in relationships.get("tuples", []):
                 entity = tuple_data.get("entity", {})
                 subject = tuple_data.get("subject", {})
+                relation = tuple_data.get("relation", "")
                 
                 # Если это группа как сущность
                 if entity.get("type") == "group":
@@ -64,7 +65,7 @@ class GroupModel(BaseModel):
                         }
                     
                     # Если это отношение member с пользователем
-                    if tuple_data.get("relation") == "member" and subject.get("type") == "user":
+                    if relation == "member" and subject.get("type") == "user":
                         user_id = subject.get("id")
                         if "members" not in groups_dict[group_id]:
                             groups_dict[group_id]["members"] = []
@@ -82,10 +83,11 @@ class GroupModel(BaseModel):
                             "app_memberships": []
                         }
                     
-                    # Если группа связана с приложением
-                    if tuple_data.get("relation") == "member":
+                    # Проверяем роль группы в приложении
+                    if relation.startswith("group_"):
                         app_type = entity.get("type")
                         app_id = entity.get("id")
+                        role = relation.replace("group_", "")  # убираем префикс group_
                         
                         if "app_memberships" not in groups_dict[group_id]:
                             groups_dict[group_id]["app_memberships"] = []
@@ -95,13 +97,16 @@ class GroupModel(BaseModel):
                         for membership in groups_dict[group_id].get("app_memberships", []):
                             if (membership.get("app_type") == app_type and 
                                 membership.get("app_id") == app_id):
+                                # Обновляем роль, если найдено существующее членство
+                                membership["role"] = role
                                 existing_membership = True
                                 break
                         
                         if not existing_membership:
                             groups_dict[group_id]["app_memberships"].append({
                                 "app_type": app_type,
-                                "app_id": app_id
+                                "app_id": app_id,
+                                "role": role
                             })
         
         return list(groups_dict.values())
@@ -178,8 +183,8 @@ class GroupModel(BaseModel):
         """Удаляет пользователя из группы."""
         return self.relationship_model.delete_relationship("group", group_id, "member", "user", user_id, tenant_id)
     
-    def assign_group_to_app(self, group_id: str, app_type: str, app_id: str, tenant_id: str = None) -> Tuple[bool, str]:
-        """Назначает группу приложению."""
+    def assign_role_to_group(self, group_id: str, app_name: str, app_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Назначает роль (право доступа) группе для приложения."""
         # Проверяем, существует ли группа
         groups = self._load_groups()
         group_exists = False
@@ -194,8 +199,16 @@ class GroupModel(BaseModel):
             self.create_group(group_id, f"Группа {group_id}")
         
         # Добавляем отношение в Permify
-        return self.relationship_model.assign_group_to_app(app_type, app_id, group_id, tenant_id)
+        return self.relationship_model.assign_role_to_group(group_id, app_name, app_id, role, tenant_id)
     
-    def remove_group_from_app(self, group_id: str, app_type: str, app_id: str, tenant_id: str = None) -> Tuple[bool, str]:
-        """Удаляет группу из приложения."""
-        return self.relationship_model.delete_relationship(app_type, app_id, "member", "group", group_id, tenant_id) 
+    def remove_role_from_group(self, group_id: str, app_type: str, app_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Удаляет роль группы из приложения."""
+        return self.relationship_model.delete_relationship(app_type, app_id, role, "group", group_id, tenant_id)
+    
+    def remove_group_from_app(self, group_id: str, app_name: str, app_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Удаляет группу из приложения (удаляет отношение)."""
+        # Используем префикс group_ для отношений группы
+        group_role = f"group_{role}"
+        
+        # Удаляем отношение
+        return self.relationship_model.delete_relationship(app_name, app_id, group_role, "group", group_id, tenant_id) 

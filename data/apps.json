@@ -1,87 +1,36 @@
 {
   "apps": [
     {
-      "name": "Testing",
+      "name": "petitions",
       "id": "1",
-      "display_name": "Testing",
+      "display_name": "Petitions",
       "actions": [
         {
           "name": "view",
           "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 view",
           "editor_allowed": true,
           "viewer_allowed": true,
-          "group_allowed": true,
-          "exporters_allowed": false,
-          "nigger_allowed": false,
-          "manager_allowed": false,
-          "approver_allowed": false
+          "group_allowed": false
         },
         {
           "name": "edit",
           "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 edit",
           "editor_allowed": true,
           "viewer_allowed": false,
-          "group_allowed": false,
-          "exporters_allowed": true,
-          "nigger_allowed": false,
-          "manager_allowed": false,
-          "approver_allowed": false
+          "group_allowed": false
         },
         {
           "name": "delete",
           "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 delete",
           "editor_allowed": false,
           "viewer_allowed": false,
-          "group_allowed": false,
-          "exporters_allowed": false,
-          "nigger_allowed": false,
-          "manager_allowed": false,
-          "approver_allowed": false
-        },
-        {
-          "name": "export",
-          "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 export",
-          "editor_allowed": true,
-          "viewer_allowed": false,
-          "group_allowed": false,
-          "exporters_allowed": true,
-          "nigger_allowed": false,
-          "manager_allowed": false,
-          "approver_allowed": false
+          "group_allowed": false
         }
       ],
-      "users": [
-        {
-          "user_id": "1",
-          "role": "nigger"
-        },
-        {
-          "user_id": "1",
-          "role": "manager"
-        },
-        {
-          "user_id": "1",
-          "role": "viewer"
-        },
-        {
-          "user_id": "1",
-          "role": "exporters"
-        },
-        {
-          "user_id": "1",
-          "role": "owner"
-        }
-      ],
-      "groups": [
-        "1"
-      ],
+      "users": [],
+      "groups": [],
       "metadata": {
-        "custom_relations": [
-          "exporters",
-          "nigger",
-          "manager",
-          "approver"
-        ]
+        "custom_relations": []
       }
     }
   ]

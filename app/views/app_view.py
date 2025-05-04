@@ -903,10 +903,10 @@ class AppView(BaseView):
                         st.write(" ")
                         st.write(" ")
                         if st.button("➕ Добавить", key="add_group_to_app", type="primary"):
-                            success, message = self.controller.assign_group_to_app(
+                            success, message = self.controller.assign_role_to_group(
+                                selected_group,
                                 selected_app.get('name'),
                                 selected_app.get('id'),
-                                selected_group,
                                 selected_role,  # Передаем выбранную роль
                                 tenant_id
                             )

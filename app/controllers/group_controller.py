@@ -24,10 +24,14 @@ class GroupController(BaseController):
         """Удаляет пользователя из группы."""
         return self.group_model.remove_user_from_group(group_id, user_id, tenant_id)
     
-    def assign_group_to_app(self, group_id, app_type, app_id, tenant_id=None):
-        """Назначает группу приложению."""
-        return self.group_model.assign_group_to_app(group_id, app_type, app_id, tenant_id)
+    def assign_role_to_group(self, group_id, app_name, app_id, role, tenant_id=None):
+        """Назначает роль (право) группе для приложения."""
+        return self.group_model.assign_role_to_group(group_id, app_name, app_id, role, tenant_id)
     
-    def remove_group_from_app(self, group_id, app_type, app_id, tenant_id=None):
+    def remove_group_from_app(self, group_id, app_name, app_id, role, tenant_id=None):
         """Удаляет группу из приложения."""
-        return self.group_model.remove_group_from_app(group_id, app_type, app_id, tenant_id) 
+        return self.group_model.remove_group_from_app(group_id, app_name, app_id, role, tenant_id)
+    
+    def remove_role_from_group(self, group_id, app_type, app_id, role, tenant_id=None):
+        """Удаляет роль группы из приложения."""
+        return self.group_model.remove_role_from_group(group_id, app_type, app_id, role, tenant_id) 

@@ -32,4 +32,18 @@ class RelationshipController(BaseController):
     
     def delete_multiple_relationships(self, relationships, tenant_id=None):
         """Удаляет несколько отношений."""
-        return self.relationship_model.delete_multiple_relationships(relationships, tenant_id) 
+        return self.relationship_model.delete_multiple_relationships(relationships, tenant_id)
+    
+    def get_user_groups(self, user_id, tenant_id=None):
+        """Получает список групп для пользователя."""
+        return self.relationship_model.get_user_groups(user_id, tenant_id)
+    
+    def get_group_roles(self, group_id, entity_type, entity_id, tenant_id=None):
+        """Получает список ролей группы для конкретного приложения."""
+        return self.relationship_model.get_group_roles(group_id, entity_type, entity_id, tenant_id)
+    
+    def check_role_permission(self, entity_type, entity_id, permission, role, tenant_id=None, schema_version=None):
+        """Проверяет, дает ли указанная роль доступ к определенному действию."""
+        return self.relationship_model.check_role_permission(
+            entity_type, entity_id, permission, role, tenant_id, schema_version
+        ) 
