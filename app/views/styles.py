@@ -49,19 +49,30 @@ div[data-testid="stAppViewContainer"] > div > div > div {
 .css-18e3th9 {
     padding-left: 1rem !important;
     padding-right: 1rem !important;
-    max-width: none !important;
+    max-width: 98% !important;
 }
 
 /* Расширение содержимого на всю доступную ширину */
 .css-1y4p8pa {
     width: 100% !important;
-    max-width: 100% !important;
+    max-width: 98% !important;
 }
 
 /* Полная ширина для всех внутренних контейнеров */
 .css-1r6slb0, .css-keje6w, .css-1l4w6pd, .css-1offfwp {
-    max-width: 100% !important;
+    max-width: 98% !important;
     width: 100% !important;
+}
+
+/* Дополнительные стили для контейнеров */
+.css-ocqkz7, .css-k1vhr4, .css-9s5bis, .css-1544g2n {
+    max-width: 98% !important;
+    width: 100% !important;
+}
+
+/* Принудительное расширение главного контейнера */
+.main .block-container {
+    max-width: 98% !important;
 }
 
 /* Расширение контейнеров таблиц */
@@ -214,6 +225,37 @@ input[type="text"]:focus, textarea:focus {
     color: var(--text) !important;
 }
 
+/* Улучшенные стили для карточек пользователей и приложений */
+.user-tag, .app-tag {
+    background-color: var(--secondary-bg);
+    color: var(--text);
+    padding: 0.5rem 0.75rem;
+    border-radius: 1rem;
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--border);
+    display: inline-block;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+}
+
+.user-tag:hover, .app-tag:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.user-tag {
+    border-color: var(--primary-dark);
+}
+
+.app-tag {
+    border-color: var(--info);
+}
+
+.user-tag span, .app-tag span {
+    font-weight: 500;
+}
+
 /* Стили для бейджей и меток */
 .badge {
     display: inline-block !important;
@@ -305,6 +347,17 @@ input[type="text"]:focus, textarea:focus {
     color: var(--text) !important;
     font-size: 2rem !important;
     font-weight: 700 !important;
+}
+
+/* Улучшение текстовых стилей */
+h1, h2, h3, h4, h5, h6 {
+    color: var(--text) !important;
+    margin-top: 0.5rem !important;
+    margin-bottom: 1rem !important;
+}
+
+p, li, a {
+    color: var(--text) !important;
 }
 
 /* Улучшение отзывчивости колонок */

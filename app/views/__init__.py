@@ -7,4 +7,17 @@ from .relationship_view import RelationshipView
 from .permission_check_view import PermissionCheckView
 from .status_view import StatusView
 from .index_view import IndexView
-from .tenant_view import TenantView 
+from .tenant_view import TenantView
+from .integration_view import IntegrationView
+
+__all__ = [
+    'IndexView',
+    'SchemaView',
+    'PermissionCheckView',
+    'TenantView',
+    'RelationshipView',
+    'UserView',
+    'GroupView',
+    'AppView',
+    'IntegrationView'
+] 

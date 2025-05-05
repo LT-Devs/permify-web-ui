@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -10,8 +10,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Установка Python зависимостей
+COPY wheels /app/wheels
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-index --find-links=/app/wheels -r requirements.txt
+
 
 # Копирование приложения
 COPY . .
@@ -22,5 +24,5 @@ RUN chmod +x *.py
 # Порт для Streamlit
 EXPOSE 8501
 
-# Запускаем Streamlit приложение
-CMD ["streamlit", "run", "permify_app.py", "--server.port=8501", "--server.address=0.0.0.0"] 
+# Запускаем приложение
+CMD ["python", "run.py"] 

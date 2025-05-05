@@ -305,125 +305,55 @@ class SchemaModel(BaseModel):
         
         return "\n".join(schema_lines)
 
-    def generate_and_apply_schema(self, tenant_id: str = None) -> Tuple[bool, Any]:
-        """Генерирует и применяет схему на основе текущих данных приложений и ролей."""
+    def generate_and_apply_schema(self, tenant_id: str = None) -> Tuple[bool, str]:
+        """Генерирует и применяет схему на основе существующих данных."""
         tenant_id = tenant_id or self.default_tenant
         
-        try:
-            # Загружаем данные приложений из модели приложений
-            from .app_model import AppModel
-            app_model = AppModel()
-            apps = app_model.get_apps(tenant_id)
-            
-            # Загружаем данные групп
-            from .group_model import GroupModel
-            group_model = GroupModel()
-            groups = group_model.get_groups(tenant_id)
-            
-            # Загружаем текущие отношения для анализа ролей групп
-            from .relationship_model import RelationshipModel
-            relationship_model = RelationshipModel()
-            success, relationships_data = relationship_model.get_relationships(tenant_id)
-            
-            if not success:
-                return False, "Не удалось получить отношения для генерации схемы"
-            
-            # Преобразуем список групп в словарь для удобства
-            groups_dict = {group.get('id'): group for group in groups}
-            
-            # Генерируем новую схему
-            schema_content = "// Автоматически сгенерированная схема\n\n"
-            
-            # Добавляем базовые сущности
-            schema_content += "entity user {}\n\n"
-            schema_content += "entity group {\n  relation member @user\n}\n\n"
-            
-            # Добавляем приложения
-            for app in apps:
-                if app.get('is_template', False):
-                    continue  # Пропускаем шаблоны
-                
-                app_name = app.get('name')
-                app_id = app.get('id')
-                if not app_name or not app_id:
-                    continue
-                
-                schema_content += f"entity {app_name} {{\n"
-                
-                # Добавляем отношения для пользователей
-                schema_content += "  relation owner @user\n"
-                schema_content += "  relation editor @user\n"
-                schema_content += "  relation viewer @user\n"
-                
-                # Добавляем отношения для групп
-                schema_content += "  relation group_owner @group\n"
-                schema_content += "  relation group_editor @group\n"
-                schema_content += "  relation group_viewer @group\n"
-                
-                # Добавляем пользовательские отношения для пользователей и групп
-                custom_relations = app.get('metadata', {}).get('custom_relations', [])
-                for relation in custom_relations:
-                    schema_content += f"  relation {relation} @user\n"
-                    schema_content += f"  relation group_{relation} @group\n"
-                
-                # Пустая строка между отношениями и действиями
-                schema_content += "\n"
-                
-                # Собираем правила для действий
-                for action in app.get('actions', []):
-                    action_name = action.get('name')
-                    if not action_name:
-                        continue
-                    
-                    # Формируем правило для действия
-                    rule_parts = ["owner"]  # владелец всегда имеет все права
-                    group_rule_parts = ["group_owner.member"]  # групповые права для владельца
-                    
-                    # Добавляем стандартные роли
-                    if action.get('editor_allowed', False):
-                        rule_parts.append("editor")
-                        group_rule_parts.append("group_editor.member")
-                    if action.get('viewer_allowed', False):
-                        rule_parts.append("viewer")
-                        group_rule_parts.append("group_viewer.member")
-                    
-                    # Добавляем пользовательские роли
-                    for key, value in action.items():
-                        if key.endswith("_allowed") and key not in ["editor_allowed", "viewer_allowed", "group_allowed"] and value:
-                            relation = key.replace("_allowed", "")
-                            if relation in custom_relations:
-                                rule_parts.append(relation)
-                                group_rule_parts.append(f"group_{relation}.member")
-                    
-                    # Объединяем все правила с "or"
-                    all_rules = rule_parts + group_rule_parts
-                    rule = " or ".join(all_rules)
-                    
-                    schema_content += f"  action {action_name} = {rule}\n"
-                
-                # Закрываем блок приложения
-                schema_content += "}\n\n"
-            
-            # Удаляем последнюю пустую строку, если нужно
-            schema_content = schema_content.rstrip() + "\n"
-            
-            # Валидируем схему перед применением
-            is_valid, validation_msg = self.validate_schema(schema_content)
-            if not is_valid:
-                return False, f"Ошибка валидации схемы: {validation_msg}"
-            
-            # Применяем новую схему
-            success, result = self.create_schema(schema_content, tenant_id)
-            if not success:
-                return False, f"Ошибка при создании схемы: {result}"
-            
-            return True, "Схема успешно создана и применена"
+        # Получаем данные о приложениях
+        from .app_model import AppModel
+        app_model = AppModel()
+        apps_data = app_model.get_apps(tenant_id)
         
+        # Получаем данные о группах
+        from .group_model import GroupModel
+        group_model = GroupModel()
+        groups_data = group_model.get_groups(tenant_id)
+        
+        try:
+            # Генерируем схему на основе данных
+            schema_content = self.generate_schema_from_ui_data(apps_data, groups_data)
+            
+            if not schema_content:
+                # Если нет данных для генерации, создаем минимальную схему
+                schema_content = """// Базовая схема Permify
+entity user {}
+
+entity group {
+    relation member @user
+}
+
+entity application {
+    relation owner @user @group
+    relation editor @user @group
+    relation viewer @user @group
+    
+    action view = owner or editor or viewer
+    action edit = owner or editor
+    action delete = owner
+    action create = owner
+}
+"""
+            
+            # Создаем схему
+            success, result = self.create_schema(schema_content, tenant_id)
+            
+            if success:
+                return True, "Схема успешно создана и применена"
+            else:
+                return False, f"Ошибка при создании схемы: {result}"
         except Exception as e:
             import traceback
-            error_details = traceback.format_exc()
-            print(f"Ошибка при генерации и применении схемы: {str(e)}\n{error_details}")
-            return False, f"Ошибка при генерации и применении схемы: {str(e)}"
+            return False, f"Ошибка при генерации схемы: {str(e)}\n{traceback.format_exc()}"
 
     def update_schema_for_role(self, app_name: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Обновляет схему для добавления новой роли, более надежный метод."""

@@ -2,6 +2,19 @@ import streamlit as st
 import os
 from dotenv import load_dotenv
 
+# Настройка страницы Streamlit
+st.set_page_config(
+    page_title="Permify GUI", 
+    page_icon="🔐",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://github.com/permify/permify',
+        'Report a bug': 'https://github.com/permify/permify/issues',
+        'About': 'Permify GUI - интерфейс управления системой доступа'
+    }
+)
+
 # Загружаем переменные из .env файла
 load_dotenv()
 
@@ -11,18 +24,10 @@ DEFAULT_TENANT = os.environ.get("PERMIFY_TENANT", "t1")
 # Импорт представлений
 from app.views import (
     IndexView, SchemaView, PermissionCheckView, TenantView,
-    RelationshipView, UserView, GroupView, AppView
+    RelationshipView, UserView, GroupView, AppView, IntegrationView
 )
 from app.controllers import BaseController
 from app.views.styles import get_modern_styles
-
-# Настройка Streamlit
-st.set_page_config(
-    page_title="Permify GUI",
-    page_icon="🔐",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Применяем современные стили
 st.markdown(get_modern_styles(), unsafe_allow_html=True)
@@ -82,7 +87,8 @@ def main():
             {"id": "relationships", "icon": "🔗", "name": "Отношения", "description": "Управление отношениями между объектами"},
             {"id": "check", "icon": "✅", "name": "Проверка доступа", "description": "Проверка прав доступа пользователей к объектам"},
             {"id": "schemas", "icon": "📝", "name": "Схемы", "description": "Управление схемами доступа"},
-            {"id": "tenants", "icon": "🏢", "name": "Tenants", "description": "Управление tenants"}
+            {"id": "tenants", "icon": "🏢", "name": "Tenants", "description": "Управление tenants"},
+            {"id": "integration", "icon": "🔄", "name": "Интеграция", "description": "Управление интеграцией"}
         ]
         
         # Современные кнопки навигации с использованием st.button
@@ -126,6 +132,8 @@ def main():
             PermissionCheckView().render_simplified()
         elif page == "tenants":
             TenantView().render()
+        elif page == "integration":
+            IntegrationView().render()
 
 # Запуск приложения
 if __name__ == "__main__":
