@@ -36,8 +36,8 @@ class GroupModel(BaseModel):
             print(f"Ошибка при сохранении групп: {str(e)}")
             return False
     
-    def get_groups(self, tenant_id: str = None) -> List[Dict[str, Any]]:
-        """Получает список групп из хранилища и дополняет данными из отношений."""
+    def get_groups(self, tenant_id: str = None) -> Dict[str, Dict[str, Any]]:
+        """Получает словарь групп из хранилища и дополняет данными из отношений."""
         tenant_id = tenant_id or self.default_tenant
         
         # Загружаем группы из файла
@@ -87,21 +87,21 @@ class GroupModel(BaseModel):
                     if relation.startswith("group_"):
                         app_type = entity.get("type")
                         app_id = entity.get("id")
-                        role = relation.replace("group_", "")  # убираем префикс group_
+                        role = relation  # Сохраняем полное имя роли с префиксом group_
                         
                         if "app_memberships" not in groups_dict[group_id]:
                             groups_dict[group_id]["app_memberships"] = []
                         
-                        # Проверяем, нет ли уже такого членства
+                        # Проверяем, нет ли уже такого же точно членства
                         existing_membership = False
                         for membership in groups_dict[group_id].get("app_memberships", []):
                             if (membership.get("app_type") == app_type and 
-                                membership.get("app_id") == app_id):
-                                # Обновляем роль, если найдено существующее членство
-                                membership["role"] = role
+                                membership.get("app_id") == app_id and
+                                membership.get("role") == role):
                                 existing_membership = True
                                 break
                         
+                        # Добавляем новое членство, если такого еще нет
                         if not existing_membership:
                             groups_dict[group_id]["app_memberships"].append({
                                 "app_type": app_type,
@@ -109,7 +109,8 @@ class GroupModel(BaseModel):
                                 "role": role
                             })
         
-        return list(groups_dict.values())
+        # Возвращаем словарь с группами вместо списка
+        return groups_dict
     
     def create_group(self, group_id: str, name: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Создает новую группу и сохраняет в хранилище."""
@@ -259,8 +260,55 @@ class GroupModel(BaseModel):
     
     def remove_group_from_app(self, group_id: str, app_name: str, app_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Удаляет группу из приложения (удаляет отношение)."""
-        # Используем префикс group_ для отношений группы
-        group_role = f"group_{role}"
+        # Если роль уже имеет префикс group_, используем её как есть
+        if role.startswith('group_'):
+            group_role = role
+        else:
+            # Иначе добавляем префикс group_ для ролей группы
+            group_role = f"group_{role}"
         
         # Удаляем отношение
-        return self.relationship_model.delete_relationship(app_name, app_id, group_role, "group", group_id, tenant_id) 
+        return self.relationship_model.delete_relationship(app_name, app_id, group_role, "group", group_id, tenant_id)
+    
+    def assign_multiple_roles_to_group(self, group_id: str, app_name: str, app_id: str, roles: List[str], tenant_id: str = None) -> Tuple[int, int, List[str]]:
+        """Назначает несколько ролей группе для приложения.
+        
+        Аргументы:
+            group_id: ID группы
+            app_name: Тип приложения
+            app_id: ID приложения
+            roles: Список ролей для назначения
+            tenant_id: ID тенанта (опционально)
+            
+        Возвращает:
+            Кортеж (количество успешно назначенных ролей, количество ошибок, список сообщений об ошибках)
+        """
+        tenant_id = tenant_id or self.default_tenant
+        success_count = 0
+        error_count = 0
+        error_messages = []
+        
+        # Проверяем, существует ли группа
+        groups = self._load_groups()
+        group_exists = False
+        
+        for group in groups:
+            if group.get('id') == group_id:
+                group_exists = True
+                break
+        
+        # Если группа не существует, создаем ее
+        if not group_exists:
+            self.create_group(group_id, f"Группа {group_id}")
+        
+        # Назначаем каждую роль по отдельности
+        for role in roles:
+            success, message = self.relationship_model.assign_role_to_group(group_id, app_name, app_id, role, tenant_id)
+            
+            if success:
+                success_count += 1
+            else:
+                error_count += 1
+                error_messages.append(f"Ошибка при назначении роли '{role}': {message}")
+        
+        return success_count, error_count, error_messages 

@@ -10,7 +10,9 @@ class GroupController(BaseController):
     
     def get_groups(self, tenant_id=None):
         """Получает список групп на основе связей в системе."""
-        return self.group_model.get_groups(tenant_id)
+        groups_dict = self.group_model.get_groups(tenant_id)
+        # Преобразуем словарь в список для совместимости с представлением
+        return list(groups_dict.values()) if isinstance(groups_dict, dict) else groups_dict
     
     def create_group(self, group_id, name, tenant_id=None):
         """Создает новую группу."""
@@ -38,4 +40,8 @@ class GroupController(BaseController):
     
     def delete_group(self, group_id, tenant_id=None):
         """Удаляет группу и все её отношения в системе."""
-        return self.group_model.delete_group_with_relations(group_id, tenant_id) 
+        return self.group_model.delete_group_with_relations(group_id, tenant_id)
+    
+    def assign_multiple_roles_to_group(self, group_id, app_name, app_id, roles, tenant_id=None):
+        """Назначает несколько ролей группе для приложения."""
+        return self.group_model.assign_multiple_roles_to_group(group_id, app_name, app_id, roles, tenant_id) 

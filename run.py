@@ -24,7 +24,7 @@ def print_banner():
     """
     print(banner)
     print("Веб-интерфейс для управления Permify")
-    print("Версия 2.0.0\n")
+    print("Версия 2.0.2a\n")
 
 def check_requirements():
     """Проверяет, установлены ли все зависимости"""

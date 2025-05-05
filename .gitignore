@@ -1,1 +1,6 @@
 wheels/
+app/views/__pycache__/
+app/models/__pycache__/
+db.tar
+permify_ui.tar
+permify.tar

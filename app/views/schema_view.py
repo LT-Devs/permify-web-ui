@@ -72,6 +72,18 @@ class SchemaView(BaseView):
         
         st.info("Данный раздел позволяет принудительно обновить схему на основе имеющихся данных об объектах, ролях и разрешениях.")
         
+        # Показываем предпросмотр генерируемой схемы
+        st.subheader("Предпросмотр генерируемой схемы")
+        with st.spinner("Генерация схемы..."):
+            try:
+                # Получаем текст схемы с использованием нового метода
+                schema_text = self.controller.get_generated_schema_text(tenant_id)
+                st.code(schema_text, language="perm")
+            except Exception as e:
+                st.error(f"Ошибка при генерации схемы: {str(e)}")
+        
+        st.subheader("Создание новой схемы")
+        
         col1, col2 = st.columns([3, 1])
         
         with col1:

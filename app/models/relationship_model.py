@@ -201,10 +201,11 @@ class RelationshipModel(BaseModel):
     
     def check_permission(self, entity_type: str, entity_id: str, permission: str, 
                          user_id: str, tenant_id: str = None, schema_version: str = None) -> Tuple[bool, Any]:
-        """Проверяет разрешение."""
+        """Проверяет разрешение пользователя на действие для сущности."""
         tenant_id = tenant_id or self.default_tenant
         
-        # Подготавливаем данные для запроса
+        # Первый запрос - прямая проверка для пользователя
+        endpoint = f"/v1/tenants/{tenant_id}/permissions/check"
         data = {
             "metadata": {
                 "snap_token": "",
@@ -219,61 +220,105 @@ class RelationshipModel(BaseModel):
             }
         }
         
-        # Отправляем запрос
-        endpoint = f"/v1/tenants/{tenant_id}/permissions/check"
-        
         try:
             success, result = self.make_api_request(endpoint, data)
             
-            # Проверка результата
             if success:
                 # Если у нас нет метаданных по какой-то причине, добавим пустые
                 if 'metadata' not in result:
                     result['metadata'] = {}
-                    
-                # Если у нас denial по умолчанию, проверим доступ через группы
+                
+                # В новой схеме права групп автоматически проверяются через цепочку отношений
+                # Например, group_owner.member будет проверен автоматически
+                # Но для совместимости со старым кодом и на случай ошибок, добавим дополнительную проверку:
+                
+                # Если доступ запрещен, попробуем проверить группы вручную
                 if not result.get("can") and result.get("can") != "CHECK_RESULT_ALLOWED":
                     # Получаем группы пользователя
                     user_groups = self.get_user_groups(user_id, tenant_id)
                     
-                    # Проверяем доступ через каждую группу
+                    # Для каждой группы проверяем права напрямую
                     for group_id in user_groups:
-                        # Проверяем права напрямую для каждой группы
-                        group_data = {
-                            "metadata": {
-                                "snap_token": "",
-                                "schema_version": schema_version or "",
-                                "depth": 20
-                            },
-                            "entity": {"type": entity_type, "id": entity_id},
-                            "permission": permission,
-                            "subject": {
-                                "type": "group", 
-                                "id": group_id
-                            }
-                        }
-                        
-                        group_success, group_result = self.make_api_request(endpoint, group_data)
-                        
-                        # Если хотя бы одна группа имеет доступ, разрешаем
-                        if group_success and (group_result.get("can") == True or group_result.get("can") == "CHECK_RESULT_ALLOWED"):
-                            result["can"] = True
-                            result["metadata"]["reason"] = f"Доступ предоставлен через членство в группе (группа: {group_id})"
-                            break
-                        
-                        # Проверяем каждую роль группы для данного приложения
-                        group_roles = self.get_group_roles(group_id, entity_type, entity_id, tenant_id)
-                        for role in group_roles:
-                            # Для каждой роли проверяем, дает ли она доступ к нужному действию
-                            has_permission = self.check_role_permission(entity_type, entity_id, permission, role, tenant_id, schema_version)
-                            if has_permission:
-                                result["can"] = True
-                                result["metadata"]["reason"] = f"Доступ предоставлен через роль {role} группы (группа: {group_id})"
-                                break
-            
-            return success, result
+                        # Проверяем права с явным указанием group_* ролей
+                        for role_prefix in ["group_owner", "group_editor", "group_viewer"]:
+                            # Проверяем наличие такого отношения
+                            has_relation = self.check_relationship_exists(
+                                entity_type, entity_id, role_prefix, "group", group_id, tenant_id
+                            )
+                            
+                            if has_relation:
+                                # Если отношение существует, проверяем разрешение напрямую
+                                if self._check_role_grants_permission(role_prefix, permission):
+                                    result["can"] = True
+                                    result["metadata"]["reason"] = f"Доступ предоставлен через роль {role_prefix} группы (группа: {group_id})"
+                                    break
+                
+                return success, result
+            else:
+                return False, result
         except Exception as e:
             return False, f"Ошибка при проверке разрешения: {str(e)}"
+    
+    def _check_role_grants_permission(self, role: str, permission: str) -> bool:
+        """Проверяет, дает ли роль доступ к запрашиваемому разрешению."""
+        # Карта ролей и их прав
+        role_permissions = {
+            "owner": ["view", "edit", "delete", "create", "export", "read", "write", "manage"],
+            "editor": ["view", "edit", "read", "write"],
+            "viewer": ["view", "read"],
+            "group_owner": ["view", "edit", "delete", "create", "export", "read", "write", "manage"],
+            "group_editor": ["view", "edit", "read", "write"],
+            "group_viewer": ["view", "read"]
+        }
+        
+        # Для кастомных ролей группы с префиксом group_* предоставляем соответствующие права
+        if role.startswith("group_") and role not in role_permissions:
+            # Извлекаем базовую роль без префикса group_
+            base_role = role[6:]  # убираем 'group_'
+            
+            # Предполагаем, что кастомная роль дает те же права, что и стандартная с таким же названием
+            # Или, если такой стандартной роли нет, предоставляем базовый набор прав (view, read)
+            if base_role in role_permissions:
+                return permission in role_permissions[base_role]
+            else:
+                # Для неизвестных кастомных ролей предоставляем доступ к permission, если оно совпадает с именем роли
+                # Например, роль group_view_petitions дает доступ к permission view_petitions
+                if permission == base_role:
+                    return True
+                return permission in ["view", "read"]  # базовый набор прав для всех кастомных ролей
+        
+        # Если роль неизвестна или разрешение не указано, запрещаем
+        if role not in role_permissions or not permission:
+            return False
+        
+        # Проверяем наличие разрешения в списке разрешенных для роли
+        return permission in role_permissions[role]
+    
+    def check_relationship_exists(self, entity_type: str, entity_id: str, relation: str, 
+                                 subject_type: str, subject_id: str, tenant_id: str = None) -> bool:
+        """Проверяет существование указанного отношения."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        # Получаем все отношения
+        success, relationships = self.get_relationships(tenant_id)
+        if not success:
+            return False
+        
+        # Ищем нужное отношение
+        for tuple_data in relationships.get("tuples", []):
+            entity = tuple_data.get("entity", {})
+            subject = tuple_data.get("subject", {})
+            rel = tuple_data.get("relation", "")
+            
+            if (entity.get("type") == entity_type and 
+                entity.get("id") == entity_id and
+                rel == relation and
+                subject.get("type") == subject_type and
+                subject.get("id") == subject_id):
+                
+                return True
+        
+        return False
     
     def get_user_groups(self, user_id: str, tenant_id: str = None) -> List[str]:
         """Получает список групп, в которых состоит пользователь."""
@@ -305,15 +350,116 @@ class RelationshipModel(BaseModel):
         """Добавляет пользователя в группу (создает отношение group-member-user)."""
         return self.create_relationship("group", group_id, "member", "user", user_id, tenant_id)
     
-    def assign_role_to_group(self, group_id: str, app_name: str, app_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
-        """Назначает группе роль в приложении (owner, editor, viewer и пользовательские роли)."""
+    def assign_role_to_group(self, group_id: str, entity_type: str, entity_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
+        """Назначает роль группе для сущности."""
         tenant_id = tenant_id or self.default_tenant
         
-        # Используем префикс group_ для отношений группы
-        group_role = f"group_{role}"
+        # Получаем текущую версию схемы
+        from .schema_model import SchemaModel
+        schema_model = SchemaModel()
+        schema_version = ""
         
-        # Создаем отношение
-        return self.create_relationship(app_name, app_id, group_role, "group", group_id, tenant_id)
+        try:
+            success, schema_result = schema_model.get_current_schema(tenant_id)
+            if success and schema_result and "version" in schema_result:
+                schema_version = schema_result["version"]
+                print(f"DEBUG: Получена версия схемы: {schema_version}")
+            else:
+                print(f"DEBUG: Не удалось получить версию схемы, success={success}, result={schema_result}")
+        except Exception as e:
+            print(f"Ошибка при получении версии схемы: {str(e)}")
+        
+        # Добавляем префикс group_ к роли для отличия от пользовательских ролей
+        # Преобразуем стандартные роли в формат с префиксом group_
+        group_role_mapping = {
+            "owner": "group_owner",
+            "editor": "group_editor",
+            "viewer": "group_viewer",
+            "member": "group_member"
+        }
+        
+        # Используем префикс group_ если это стандартная роль, иначе добавляем префикс group_ к кастомной роли
+        if role in group_role_mapping:
+            relation = group_role_mapping[role]
+        else:
+            # Если кастомная роль, добавляем префикс group_
+            relation = f"group_{role}"
+            
+        print(f"DEBUG: Назначение роли группе: {group_id}, роль: {role} -> {relation}, для {entity_type}:{entity_id}")
+        
+        # Используем правильный формат запроса с массивом tuples
+        data = {
+            "metadata": {
+                "schema_version": schema_version
+            },
+            "tuples": [
+                {
+                    "entity": {"type": entity_type, "id": entity_id},
+                    "relation": relation,
+                    "subject": {"type": "group", "id": group_id}
+                }
+            ]
+        }
+        
+        # Используем endpoint для записи данных
+        endpoint = f"/v1/tenants/{tenant_id}/data/write"
+        print(f"DEBUG: Отправка запроса на endpoint: {endpoint}")
+        print(f"DEBUG: Содержимое запроса: {data}")
+        
+        success, result = self.make_api_request(endpoint, data)
+        print(f"DEBUG: Результат запроса: success={success}, result={result}")
+        
+        if success:
+            # Добавляем отношение также и в локальное хранилище
+            # Загружаем текущие отношения
+            relationships = self._load_relationships()
+            
+            # Создаем новое отношение в том же формате, что и API
+            new_tuple = {
+                "entity": {"type": entity_type, "id": entity_id},
+                "relation": relation,
+                "subject": {
+                    "type": "group", 
+                    "id": group_id,
+                    "relation": ""
+                }
+            }
+            
+            # Проверяем, существует ли уже такое отношение в локальном хранилище
+            exists = False
+            for tuple_data in relationships.get("tuples", []):
+                entity = tuple_data.get("entity", {})
+                subject = tuple_data.get("subject", {})
+                
+                if (entity.get("type") == entity_type and 
+                    entity.get("id") == entity_id and 
+                    tuple_data.get("relation") == relation and 
+                    subject.get("type") == "group" and 
+                    subject.get("id") == group_id):
+                    exists = True
+                    break
+            
+            # Если не существует, добавляем
+            if not exists:
+                relationships["tuples"].append(new_tuple)
+                # Сохраняем обновленные отношения
+                self._save_relationships(relationships)
+                print(f"DEBUG: Отношение добавлено в локальное хранилище")
+            else:
+                print(f"DEBUG: Отношение уже существует в локальном хранилище")
+            
+            # Проверяем, что отношение действительно было создано
+            has_relation = self.check_relationship_exists(
+                entity_type, entity_id, relation, "group", group_id, tenant_id
+            )
+            print(f"DEBUG: Проверка создания отношения: {has_relation}")
+            
+            if has_relation:
+                return True, f"Роль {role} успешно назначена группе {group_id} для сущности {entity_type}:{entity_id}"
+            else:
+                return False, f"Ошибка при назначении роли: отношение не найдено после создания"
+        else:
+            return False, f"Ошибка при назначении роли: {result}"
     
     def assign_user_to_app(self, app_name: str, app_id: str, user_id: str, role: str, tenant_id: str = None) -> Tuple[bool, str]:
         """Назначает пользователю роль в приложении (owner, editor, viewer и пользовательские роли)."""

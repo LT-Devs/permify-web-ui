@@ -1,0 +1,116 @@
+{
+  "apps": [
+    {
+      "name": "dashboard",
+      "id": "1",
+      "display_name": "Dashboard",
+      "actions": [
+        {
+          "name": "view",
+          "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 view",
+          "editor_allowed": true,
+          "viewer_allowed": true,
+          "group_allowed": false,
+          "petitionsviewer_allowed": false,
+          "reportsviewer_allowed": false,
+          "inquiryviewer_allowed": false,
+          "statisticviewer_allowed": false
+        },
+        {
+          "name": "edit",
+          "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 edit",
+          "editor_allowed": true,
+          "viewer_allowed": false,
+          "group_allowed": false,
+          "petitionsviewer_allowed": false,
+          "reportsviewer_allowed": false,
+          "inquiryviewer_allowed": false,
+          "statisticviewer_allowed": false
+        },
+        {
+          "name": "delete",
+          "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 delete",
+          "editor_allowed": false,
+          "viewer_allowed": false,
+          "group_allowed": false,
+          "petitionsviewer_allowed": false,
+          "reportsviewer_allowed": false,
+          "inquiryviewer_allowed": false,
+          "statisticviewer_allowed": false
+        },
+        {
+          "name": "view_petitions",
+          "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 view_petitions",
+          "editor_allowed": false,
+          "viewer_allowed": false,
+          "group_allowed": false,
+          "petitionsviewer_allowed": true,
+          "reportsviewer_allowed": false,
+          "inquiryviewer_allowed": false,
+          "statisticviewer_allowed": false
+        },
+        {
+          "name": "view_statistic",
+          "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 view_statistic",
+          "editor_allowed": false,
+          "viewer_allowed": false,
+          "group_allowed": false,
+          "petitionsviewer_allowed": false,
+          "reportsviewer_allowed": false,
+          "inquiryviewer_allowed": false,
+          "statisticviewer_allowed": true
+        },
+        {
+          "name": "view_reports",
+          "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 view_reports",
+          "editor_allowed": false,
+          "viewer_allowed": false,
+          "group_allowed": false,
+          "petitionsviewer_allowed": false,
+          "reportsviewer_allowed": true,
+          "inquiryviewer_allowed": false,
+          "statisticviewer_allowed": false
+        },
+        {
+          "name": "view_inquiry",
+          "description": "\u0414\u0435\u0439\u0441\u0442\u0432\u0438\u0435 view_inquiry",
+          "editor_allowed": false,
+          "viewer_allowed": false,
+          "group_allowed": false,
+          "petitionsviewer_allowed": false,
+          "reportsviewer_allowed": false,
+          "inquiryviewer_allowed": true,
+          "statisticviewer_allowed": false
+        }
+      ],
+      "users": [
+        {
+          "user_id": "1",
+          "role": "viewer"
+        },
+        {
+          "user_id": "siromatnikov_v.v",
+          "role": "editor"
+        },
+        {
+          "user_id": "siromatnikov_v.v",
+          "role": "petitionsviewer"
+        },
+        {
+          "user_id": "siromatnikov_v.v",
+          "role": "reportsviewer"
+        }
+      ],
+      "groups": [],
+      "metadata": {
+        "custom_relations": [
+          "inquiryviewer",
+          "group",
+          "statisticviewer",
+          "reportsviewer",
+          "petitionsviewer"
+        ]
+      }
+    }
+  ]
+}

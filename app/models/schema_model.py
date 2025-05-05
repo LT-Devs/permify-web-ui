@@ -83,7 +83,7 @@ class SchemaModel(BaseModel):
         return True, schema_result
     
     def create_default_schema(self, tenant_id: str = None) -> Tuple[bool, Any]:
-        """Создает схему по умолчанию на основе существующих данных."""
+        """Создает схему по умолчанию на основе существующих данных с поддержкой наследования прав через группы."""
         tenant_id = tenant_id or self.default_tenant
         
         # Загружаем отношения для анализа
@@ -100,6 +100,7 @@ class SchemaModel(BaseModel):
         
         # Добавляем базовые сущности
         entities["user"] = {"relations": [], "actions": []}
+        entities["group"] = {"relations": ["member", "admin"], "actions": []}
         
         # Собираем информацию из отношений
         for tuple_data in relationships.get("tuples", []):
@@ -131,34 +132,66 @@ class SchemaModel(BaseModel):
         # Добавляем сущность пользователя
         schema_content += "entity user {}\n\n"
         
+        # Добавляем сущность группы
+        schema_content += "entity group {\n"
+        schema_content += "  relation member @user\n"
+        schema_content += "  relation admin @user\n"
+        schema_content += "}\n\n"
+        
         # Добавляем остальные сущности
         for entity_name, entity_data in entities.items():
-            if entity_name == "user":
+            if entity_name in ["user", "group"]:
                 continue
                 
             schema_content += f"entity {entity_name} {{\n"
             
-            # Добавляем отношения
+            # Добавляем отношения с пользователями
+            user_relations = []
             for relation in entity_data["relations"]:
-                # Если это отношение для пользователей, добавляем также и для групп
-                if relation in ["owner", "editor", "viewer"] or entity_name in ["permissions", "petitions", "oodiks"]:
-                    schema_content += f"  relation {relation} @user @group\n"
-                else:
-                    schema_content += f"  relation {relation} @user\n"
+                if relation.startswith("group_"):
+                    continue  # Пропускаем relations, которые уже имеют префикс group_
+                    
+                schema_content += f"  relation {relation} @user\n"
+                user_relations.append(relation)
+            
+            # Добавляем отношения с группами (с префиксом group_)
+            for relation in user_relations:
+                if relation in ["owner", "editor", "viewer"]:
+                    schema_content += f"  relation group_{relation} @group\n"
             
             # Добавляем стандартные действия
             standard_actions = ["view", "edit", "create", "delete"]
             for action in standard_actions:
-                if len(entity_data["relations"]) > 0:
-                    # Используем первое отношение как стандартное для действий
-                    first_relation = entity_data["relations"][0]
+                # Формируем правила доступа с учетом групп
+                rule_parts = []
+                
+                # Прямой доступ через роли пользователя
+                if "owner" in user_relations:
+                    rule_parts.append("owner")
+                
+                if action in ["view"] and "viewer" in user_relations:
+                    rule_parts.append("viewer")
                     
-                    # Проверяем групповые права
-                    if entity_name not in ["user", "group"]:
-                        # Используем синтаксис "and" и "or" для связывания правил
-                        schema_content += f"  action {action} = {first_relation} or group.member and group.{first_relation}\n"
-                    else:
-                        schema_content += f"  action {action} = {first_relation}\n"
+                if action in ["view", "edit"] and "editor" in user_relations:
+                    rule_parts.append("editor")
+                
+                # Доступ через группы
+                group_rule_parts = []
+                if "owner" in user_relations:
+                    group_rule_parts.append("group_owner.member")
+                    
+                if action in ["view"] and "viewer" in user_relations:
+                    group_rule_parts.append("group_viewer.member")
+                    
+                if action in ["view", "edit"] and "editor" in user_relations:
+                    group_rule_parts.append("group_editor.member")
+                
+                # Объединяем правила
+                all_rule_parts = rule_parts + group_rule_parts
+                
+                if all_rule_parts:
+                    rule = " or ".join(all_rule_parts)
+                    schema_content += f"  action {action} = {rule}\n"
             
             schema_content += "}\n\n"
         
@@ -267,41 +300,135 @@ class SchemaModel(BaseModel):
         
         return entities_info
         
-    def generate_schema_from_ui_data(self, apps_data: Dict[str, Any], groups_data: Dict[str, Any]) -> str:
-        """Генерирует схему на основе данных из UI."""
-        schema_lines = ["entity user {}"]
+    def generate_schema_from_ui_data(self, apps_data: List[Dict[str, Any]], groups_data: Dict[str, Any]) -> str:
+        """Генерирует схему на основе данных из UI с корректной передачей прав от групп к пользователям."""
+        schema_lines = []
         
-        # Добавляем группы
-        for group_id, group_info in groups_data.items():
-            schema_lines.append(f"\nentity group {{\n  relation member @user\n}}")
+        # Добавляем базового пользователя
+        schema_lines.append("// Автоматически сгенерированная схема\n")
+        schema_lines.append("// Базовая сущность пользователя")
+        schema_lines.append("entity user {}")
         
-        # Добавляем приложения
-        for app_id, app_info in apps_data.items():
-            app_name = app_info["name"]
-            app_lines = [f"\nentity {app_name} {{"]
-            
-            # Добавляем отношения
-            app_lines.append("  relation owner @user")
-            app_lines.append("  relation editor @user")
-            app_lines.append("  relation viewer @user")
-            app_lines.append("  relation member @group")
-            
-            # Добавляем действия (permissions)
-            for action in app_info.get("actions", []):
-                action_name = action["name"]
-                # Формируем правило действия в зависимости от разрешений
-                rule = "owner"
-                if action.get("editor_allowed", False):
-                    rule += " or editor"
-                if action.get("viewer_allowed", False):
-                    rule += " or viewer"
-                if action.get("group_allowed", False):
-                    rule += " or member"
+        # Добавляем группы с правильной связью с пользователями
+        schema_lines.append("\n// Группы пользователей")
+        if groups_data:
+            schema_lines.append("entity group {")
+            schema_lines.append("  // Отношение между группой и её участниками")
+            schema_lines.append("  relation member @user")
+            schema_lines.append("  relation admin @user")
+            schema_lines.append("}")
+        else:
+            # Если групп нет, всё равно создаем базовую сущность группы
+            schema_lines.append("entity group {")
+            schema_lines.append("  relation member @user")
+            schema_lines.append("}")
+        
+        # Добавляем приложения с правильной моделью наследования прав
+        # Проверяем, является ли apps_data списком или словарем
+        if isinstance(apps_data, list):
+            # Обрабатываем список приложений
+            for app_info in apps_data:
+                if not app_info.get("name"):
+                    continue  # Пропускаем приложения без имени
+                    
+                app_name = app_info.get("name")
+                schema_lines.append(f"\n// Приложение {app_name}")
+                schema_lines.append(f"entity {app_name} {{")
                 
-                app_lines.append(f"  action {action_name} = {rule}")
+                # Добавляем отношения с пользователями напрямую
+                schema_lines.append("  // Прямые отношения с пользователями")
+                schema_lines.append("  relation owner @user")
+                schema_lines.append("  relation editor @user")
+                schema_lines.append("  relation viewer @user")
+                
+                # Добавляем кастомные роли из метаданных
+                custom_relations = []
+                if 'metadata' in app_info and 'custom_relations' in app_info.get('metadata', {}):
+                    custom_relations = app_info.get('metadata', {}).get('custom_relations', [])
+                    
+                if custom_relations:
+                    schema_lines.append("\n  // Кастомные роли для пользователей")
+                    for relation in custom_relations:
+                        schema_lines.append(f"  relation {relation} @user")
+                
+                # Добавляем отношения с группами
+                schema_lines.append("\n  // Отношения с группами")
+                schema_lines.append("  relation group_owner @group")
+                schema_lines.append("  relation group_editor @group")
+                schema_lines.append("  relation group_viewer @group")
+                
+                # Добавляем отношения group_ для кастомных ролей
+                if custom_relations:
+                    schema_lines.append("\n  // Кастомные роли для групп")
+                    for relation in custom_relations:
+                        schema_lines.append(f"  relation group_{relation} @group")
+                
+                schema_lines.append("\n  // Действия (permissions) с учетом иерархии групп")
+                
+                # Добавляем действия с учетом прав групп
+                for action in app_info.get("actions", []):
+                    action_name = action.get("name")
+                    if not action_name:
+                        continue  # Пропускаем действия без имени
+                        
+                    # Формируем правило действия с учетом наследования прав от групп к пользователям
+                    rule_parts = ["owner"]
+                    
+                    if action.get("editor_allowed", False):
+                        rule_parts.append("editor")
+                    
+                    if action.get("viewer_allowed", False):
+                        rule_parts.append("viewer")
+                    
+                    # Добавляем кастомные роли с соответствующими правами
+                    for custom_role in custom_relations:
+                        if action.get(f"{custom_role}_allowed", False):
+                            rule_parts.append(custom_role)
+                    
+                    # Добавляем доступ через группы (группа → участник группы)
+                    group_rules = []
+                    if action.get("editor_allowed", False) or action.get("group_allowed", False):
+                        group_rules.append("group_editor.member")
+                    
+                    if action.get("viewer_allowed", False) or action.get("group_allowed", False):
+                        group_rules.append("group_viewer.member")
+                    
+                    # Добавляем группы с кастомными ролями
+                    for custom_role in custom_relations:
+                        if action.get(f"{custom_role}_allowed", False) or action.get("group_allowed", False):
+                            group_rules.append(f"group_{custom_role}.member")
+                    
+                    # Владельцы групп всегда имеют все права
+                    group_rules.append("group_owner.member")
+                    
+                    # Объединяем правила
+                    all_rules = rule_parts + group_rules
+                    rule = " or ".join(all_rules)
+                    
+                    schema_lines.append(f"  action {action_name} = {rule}")
+                
+                schema_lines.append("}")
+        
+        # Если нет приложений, добавляем базовое application
+        if not apps_data:
+            schema_lines.append("\n// Базовое приложение")
+            schema_lines.append("entity application {")
+            schema_lines.append("  // Прямые отношения с пользователями")
+            schema_lines.append("  relation owner @user")
+            schema_lines.append("  relation editor @user")
+            schema_lines.append("  relation viewer @user")
             
-            app_lines.append("}")
-            schema_lines.append("\n".join(app_lines))
+            schema_lines.append("\n  // Отношения с группами")
+            schema_lines.append("  relation group_owner @group")
+            schema_lines.append("  relation group_editor @group")
+            schema_lines.append("  relation group_viewer @group")
+            
+            schema_lines.append("\n  // Стандартные действия")
+            schema_lines.append("  action view = owner or editor or viewer or group_owner.member or group_editor.member or group_viewer.member")
+            schema_lines.append("  action edit = owner or editor or group_owner.member or group_editor.member")
+            schema_lines.append("  action delete = owner or group_owner.member")
+            schema_lines.append("  action create = owner or group_owner.member")
+            schema_lines.append("}")
         
         return "\n".join(schema_lines)
 
@@ -339,8 +466,8 @@ entity application {
     
     action view = owner or editor or viewer
     action edit = owner or editor
-    action delete = owner
-    action create = owner
+    action delete = owner or group_owner.member
+    action create = owner or group_owner.member
 }
 """
             
@@ -360,4 +487,52 @@ entity application {
         tenant_id = tenant_id or self.default_tenant
         
         # Вместо поиска в существующей схеме, генерируем новую
-        return self.generate_and_apply_schema(tenant_id) 
+        return self.generate_and_apply_schema(tenant_id)
+
+    def get_generated_schema_text(self, tenant_id: str = None) -> Tuple[bool, str]:
+        """Возвращает текст генерируемой схемы без её создания (для предпросмотра)."""
+        tenant_id = tenant_id or self.default_tenant
+        
+        try:
+            # Получаем данные о приложениях
+            from .app_model import AppModel
+            app_model = AppModel()
+            apps_data = app_model.get_apps(tenant_id)
+            
+            # Получаем данные о группах
+            from .group_model import GroupModel
+            group_model = GroupModel()
+            groups_data = group_model.get_groups(tenant_id)
+            
+            # Генерируем схему на основе данных
+            schema_content = self.generate_schema_from_ui_data(apps_data, groups_data)
+            
+            if not schema_content:
+                # Если нет данных для генерации, используем минимальную схему
+                schema_content = """// Базовая схема Permify
+entity user {}
+
+entity group {
+    relation member @user
+}
+
+entity application {
+    relation owner @user
+    relation editor @user
+    relation viewer @user
+    
+    relation group_owner @group
+    relation group_editor @group
+    relation group_viewer @group
+    
+    action view = owner or editor or viewer or group_owner.member or group_editor.member or group_viewer.member
+    action edit = owner or editor or group_owner.member or group_editor.member
+    action delete = owner or group_owner.member
+    action create = owner or group_owner.member
+}
+"""
+            
+            return True, schema_content
+        except Exception as e:
+            import traceback
+            return False, f"Ошибка при генерации схемы: {str(e)}\n{traceback.format_exc()}" 

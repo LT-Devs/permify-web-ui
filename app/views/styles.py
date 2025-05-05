@@ -98,28 +98,6 @@ div[data-testid="stAppViewContainer"] > div > div > div {
     width: 14rem !important;
 }
 
-/* Улучшение основных элементов UI */
-.stButton button {
-    border-radius: var(--radius) !important;
-    font-weight: 500 !important;
-    box-shadow: var(--shadow) !important;
-    transition: var(--transition) !important;
-    border: none !important;
-    padding: 0.5rem 1rem !important;
-    margin-bottom: 0.5rem !important;
-}
-
-.stButton button:hover {
-    transform: translateY(-2px) !important;
-    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15) !important;
-}
-
-/* Стили для основных кнопок */
-.stButton button[kind="primary"] {
-    background-color: var(--primary) !important;
-    color: white !important;
-}
-
 /* Стили для полей ввода */
 input[type="text"], textarea, .stTextInput > div > div {
     border-radius: var(--radius) !important;

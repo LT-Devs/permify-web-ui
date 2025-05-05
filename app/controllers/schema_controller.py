@@ -30,4 +30,12 @@ class SchemaController(BaseController):
         
     def generate_schema_from_ui_data(self, apps_data, groups_data):
         """Генерирует схему на основе данных из UI."""
-        return self.schema_model.generate_schema_from_ui_data(apps_data, groups_data) 
+        return self.schema_model.generate_schema_from_ui_data(apps_data, groups_data)
+        
+    def get_generated_schema_text(self, tenant_id=None):
+        """Возвращает текст генерируемой схемы для предпросмотра."""
+        success, schema_text = self.schema_model.get_generated_schema_text(tenant_id)
+        if success:
+            return schema_text
+        else:
+            raise Exception(f"Ошибка при генерации схемы: {schema_text}") 

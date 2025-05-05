@@ -145,5 +145,5 @@ class IndexView(BaseView):
         with st.sidebar:
             st.subheader("О приложении")
             st.markdown("Permify GUI - интерфейс для управления системой доступа Permify")
-            st.sidebar.markdown("Версия: 2.0.1a")
+            st.sidebar.markdown("Версия: 2.0.2a")
             st.sidebar.markdown("Разработчик: BadKiko (LT-Devs)") 

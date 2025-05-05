@@ -182,105 +182,125 @@ class UserView(BaseView):
                 
                 # Управление ролями в приложениях
                 with tabs[1]:
-                    col1, col2 = st.columns(2)
+                    st.subheader("Управление правами в приложениях")
                     
-                    with col1:
-                        st.subheader("Текущие права в приложениях")
-                        user_roles = selected_user.get('app_roles', [])
-                        
-                        if user_roles:
-                            for role in user_roles:
-                                app_type = role.get('app_type')
-                                app_id = role.get('app_id')
-                                role_name = role.get('role')
-                                
-                                # Преобразуем стандартные роли в удобочитаемый формат
-                                standard_roles = {
-                                    "owner": "👑 Владелец (полный доступ)",
-                                    "editor": "✏️ Редактор",
-                                    "viewer": "👁️ Просмотрщик"
-                                }
-                                display_role = standard_roles.get(role_name, f"🔧 {role_name.capitalize()}")
-                                
-                                col_a, col_b = st.columns([4, 1])
-                                with col_a:
-                                    app_display = next((app.get('display_name', app.get('name')) for app in apps if app.get('name') == app_type and app.get('id') == app_id), f"{app_type}")
-                                    st.write(f"- {app_display} (ID: {app_id}): **{display_role}**")
-                                with col_b:
-                                    if st.button("Удалить", key=f"remove_role_{selected_user_id}_{app_type}_{app_id}_{role_name}"):
-                                        success, message = self.controller.remove_app_role(
-                                            selected_user_id, app_type, app_id, role_name, tenant_id
-                                        )
-                                        if success:
-                                            st.success(f"Роль удалена")
-                                            st.rerun()
-                                        else:
-                                            st.error(message)
-                        else:
-                            st.info("Пользователь не имеет прав в приложениях")
+                    # Фильтруем приложения
+                    available_apps = []
+                    for app in apps:
+                        # Убедимся, что app_id существует
+                        if 'id' not in app or not app['id']:
+                            app['id'] = ''  # Установим пустую строку по умолчанию
+                        available_apps.append(app)
                     
-                    with col2:
-                        st.subheader("Назначить права в приложении")
+                    if available_apps:
+                        # Выбор приложения
+                        selected_app = st.selectbox(
+                            "Выберите приложение",
+                            [f"{app.get('name', 'Unknown')}:{app.get('id', '')}" for app in available_apps if 'name' in app],
+                            format_func=lambda x: next((f"{app.get('display_name', app.get('name'))} (ID: {app.get('id', '')})" 
+                                                for app in available_apps 
+                                                if f"{app.get('name', 'Unknown')}:{app.get('id', '')}" == x), x),
+                            key=f"app_access_app_select_{selected_user_id}"
+                        )
                         
-                        # Создаем список приложений для выбора
-                        app_options = []
-                        for app in apps:
-                            if not app.get('is_template', False) and app.get('id'):  # Только реальные экземпляры
-                                app_options.append({
-                                    "display": f"{app.get('display_name')} (ID: {app.get('id')})",
-                                    "name": app.get('name'),
-                                    "id": app.get('id')
-                                })
-                        
-                        if app_options:
-                            selected_app_index = st.selectbox(
-                                "Выберите приложение",
-                                range(len(app_options)),
-                                format_func=lambda i: app_options[i]["display"],
-                                key=f"app_select_for_user"
-                            )
+                        if selected_app:
+                            app_type, app_id = selected_app.split(":")
                             
-                            selected_app = app_options[selected_app_index]
+                            # Находим выбранное приложение
+                            selected_app_obj = next((app for app in available_apps 
+                                                if app.get('name') == app_type and app.get('id') == app_id), None)
                             
-                            col_role, col_btn = st.columns([2, 1])
-                            with col_role:
-                                # Получаем стандартные роли
-                                role_options = [
-                                    ("owner", "👑 Владелец (полный доступ)"),
-                                    ("editor", "✏️ Редактор (может изменять)"),
-                                    ("viewer", "👁️ Просмотрщик (только чтение)")
-                                ]
+                            # Получаем текущие роли пользователя для этого приложения
+                            current_roles = []
+                            current_roles_original = []  # Для хранения оригинальных имен ролей
+                            
+                            for app_role in selected_user.get('app_roles', []):
+                                if app_role.get('app_type') == app_type and app_role.get('app_id') == app_id:
+                                    # Сохраняем оригинальное имя роли для последующего удаления
+                                    role_original = app_role.get('role', '')
+                                    current_roles_original.append(role_original)
+                                    current_roles.append(role_original.lower())  # Приводим к нижнему регистру
+                            
+                            # Определяем стандартные роли
+                            standard_roles = [
+                                {"value": "owner", "label": "👑 Владелец (полный доступ)"},
+                                {"value": "editor", "label": "✏️ Редактор (изменение)"},
+                                {"value": "viewer", "label": "👁️ Просмотрщик (только чтение)"}
+                            ]
+                            
+                            # Добавляем кастомные роли из метаданных приложения
+                            custom_roles = []
+                            if selected_app_obj and 'metadata' in selected_app_obj and 'custom_relations' in selected_app_obj.get('metadata', {}):
+                                custom_relations = selected_app_obj.get('metadata', {}).get('custom_relations', [])
+                                for relation in custom_relations:
+                                    custom_roles.append({"value": relation.lower(), "label": f"🔧 {relation.capitalize()}"})
+                            
+                            # Комбинируем все роли
+                            all_roles = standard_roles + custom_roles
+                            
+                            # Создаем форму с чекбоксами
+                            with st.form(key=f"user_roles_form_{selected_user_id}_{app_type}_{app_id}"):
+                                st.write("**Выберите роли для пользователя:**")
                                 
-                                # Ищем приложение в списке приложений для получения пользовательских ролей
-                                app_obj = next((app for app in apps if app.get('name') == selected_app["name"] and app.get('id') == selected_app["id"]), None)
-                                if app_obj and 'metadata' in app_obj and 'custom_relations' in app_obj.get('metadata', {}):
-                                    for relation in app_obj.get('metadata', {}).get('custom_relations', []):
-                                        # Добавляем с emoji для визуального отличия
-                                        role_options.append((relation, f"🔧 {relation.capitalize()}"))
+                                # Используем чекбоксы для выбора ролей
+                                selected_roles = []
+                                for role in all_roles:
+                                    # Проверяем, есть ли роль в текущих ролях (приводим обе к нижнему регистру)
+                                    is_checked = role["value"].lower() in current_roles
+                                    if st.checkbox(role["label"], value=is_checked, key=f"user_role_checkbox_{selected_user_id}_{app_type}_{app_id}_{role['value']}"):
+                                        selected_roles.append(role["value"])
                                 
-                                selected_role_index = st.selectbox(
-                                    "Выберите роль",
-                                    range(len(role_options)),
-                                    format_func=lambda i: role_options[i][1],
-                                    key=f"role_select_for_user"
-                                )
-                                selected_role = role_options[selected_role_index][0]
-                            with col_btn:
-                                st.write("")
-                                if st.button("Назначить", key=f"assign_role_to_user", type="primary"):
-                                    success, message = self.controller.assign_app_role(
-                                        selected_user_id, 
-                                        selected_app["name"], 
-                                        selected_app["id"], 
-                                        selected_role, 
-                                        tenant_id
-                                    )
-                                    if success:
-                                        st.success(f"Роль назначена успешно")
+                                # Кнопка для сохранения изменений
+                                submit_button = st.form_submit_button("Сохранить изменения", type="primary")
+                                
+                                if submit_button:
+                                    try:
+                                        # Норамализуем выбранные роли
+                                        selected_roles_norm = [role.lower() for role in selected_roles]
+                                        
+                                        # Находим роли, которые нужно добавить (есть в selected_roles, но нет в current_roles)
+                                        roles_to_add = []
+                                        for i, role in enumerate(selected_roles):
+                                            if selected_roles_norm[i] not in current_roles:
+                                                roles_to_add.append(role)
+                                        
+                                        # Находим роли, которые нужно удалить
+                                        roles_to_remove = []
+                                        for role_original in current_roles_original:
+                                            if role_original.lower() not in selected_roles_norm:
+                                                roles_to_remove.append(role_original)
+                                        
+                                        # Отладочная информация
+                                        st.write(f"DEBUG: Текущие роли (нормализованные): {current_roles}")
+                                        st.write(f"DEBUG: Выбранные роли (нормализованные): {selected_roles_norm}")
+                                        st.write(f"DEBUG: Роли для добавления: {roles_to_add}")
+                                        st.write(f"DEBUG: Роли для удаления: {roles_to_remove}")
+                                        
+                                        # Сначала добавляем новые роли
+                                        for role in roles_to_add:
+                                            success, message = self.controller.assign_app_role(
+                                                selected_user_id, app_type, app_id, role, tenant_id
+                                            )
+                                            
+                                            if not success:
+                                                st.warning(f"Не удалось добавить роль {role}: {message}")
+                                        
+                                        # Затем удаляем ненужные роли
+                                        for role in roles_to_remove:
+                                            success, message = self.controller.remove_app_role(
+                                                selected_user_id, app_type, app_id, role, tenant_id
+                                            )
+                                            
+                                            if not success:
+                                                st.warning(f"Не удалось удалить роль {role}: {message}")
+                                        
+                                        st.success("Роли успешно обновлены")
                                         st.rerun()
-                                    else:
-                                        st.error(message)
-                        else:
-                            st.info("Нет доступных приложений")
+                                    except Exception as e:
+                                        import traceback
+                                        st.error(f"Ошибка при обновлении ролей: {str(e)}")
+                                        st.code(traceback.format_exc())
+                    else:
+                        st.info("Нет доступных приложений")
             else:
                 st.warning("Пользователь не найден") 
