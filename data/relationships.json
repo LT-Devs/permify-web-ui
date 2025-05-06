@@ -11,54 +11,6 @@
         "id": "siromatnikov_v.v",
         "relation": ""
       }
-    },
-    {
-      "entity": {
-        "type": "dashboard",
-        "id": "1"
-      },
-      "relation": "group_inquiryviewer",
-      "subject": {
-        "type": "group",
-        "id": "1",
-        "relation": ""
-      }
-    },
-    {
-      "entity": {
-        "type": "dashboard",
-        "id": "1"
-      },
-      "relation": "group_statisticviewer",
-      "subject": {
-        "type": "group",
-        "id": "1",
-        "relation": ""
-      }
-    },
-    {
-      "entity": {
-        "type": "dashboard",
-        "id": "1"
-      },
-      "relation": "group_reportsviewer",
-      "subject": {
-        "type": "group",
-        "id": "1",
-        "relation": ""
-      }
-    },
-    {
-      "entity": {
-        "type": "dashboard",
-        "id": "1"
-      },
-      "relation": "group_petitionsviewer",
-      "subject": {
-        "type": "group",
-        "id": "1",
-        "relation": ""
-      }
     }
   ]
 }

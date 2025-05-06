@@ -104,11 +104,11 @@
       "groups": [],
       "metadata": {
         "custom_relations": [
-          "inquiryviewer",
           "group",
           "statisticviewer",
-          "reportsviewer",
-          "petitionsviewer"
+          "inquiryviewer",
+          "petitionsviewer",
+          "reportsviewer"
         ]
       }
     }
