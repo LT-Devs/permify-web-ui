@@ -47,3 +47,54 @@ class RelationshipController(BaseController):
         return self.relationship_model.check_role_permission(
             entity_type, entity_id, permission, role, tenant_id, schema_version
         ) 
+    
+    def rebuild_all_relationships(self, tenant_id=None):
+        """Пересоздает все отношения в системе.
+        
+        Этот метод синхронизирует все отношения между пользователями, группами и приложениями.
+        Он собирает все имеющиеся отношения, удаляет их из Permify и затем создает заново.
+        
+        Args:
+            tenant_id: Идентификатор tenant (необязательно)
+            
+        Returns:
+            tuple: (success, message)
+        """
+        try:
+            # Получаем все текущие отношения
+            success, relationships_data = self.relationship_model.get_relationships(tenant_id)
+            if not success:
+                return False, "Не удалось получить текущие отношения"
+            
+            # Извлекаем список отношений
+            all_relationships = relationships_data.get("tuples", [])
+            if not all_relationships:
+                return True, "Нет отношений для пересоздания"
+            
+            # Создаем временную копию отношений
+            relationships_backup = list(all_relationships)
+            
+            # Удаляем все отношения (можно добавить подтверждение)
+            endpoint = f"/v1/tenants/{tenant_id}/data/delete"
+            self.make_api_request(endpoint, {
+                "tuple_filter": {},  # Пустой фильтр означает "все отношения"
+            })
+            
+            # Восстанавливаем отношения по одному
+            for relationship in relationships_backup:
+                entity = relationship.get("entity", {})
+                subject = relationship.get("subject", {})
+                relation = relationship.get("relation", "")
+                
+                self.create_relationship(
+                    entity.get("type"),
+                    entity.get("id"),
+                    relation,
+                    subject.get("type"),
+                    subject.get("id"),
+                    tenant_id
+                )
+            
+            return True, f"Успешно пересоздано {len(relationships_backup)} отношений"
+        except Exception as e:
+            return False, f"Ошибка при пересоздании отношений: {str(e)}" 

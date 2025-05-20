@@ -1,22 +1,25 @@
+FROM python:3.13-slim AS builder
+
+WORKDIR /app
+
+# Копируем только файлы для установки
+COPY requirements.txt .
+# Устанавливаем зависимости, копируем только то что нужно
+COPY wheels /app/wheels
+RUN pip install --no-index --find-links=/app/wheels -r requirements.txt \
+    && rm -rf /app/wheels
+
+# Многоступенчатая сборка - финальный образ
 FROM python:3.13-slim
 
 WORKDIR /app
 
-# Установка зависимостей
-RUN apt-get update && apt-get install -y \
-    curl \
-    netcat-openbsd \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-# Установка Python зависимостей
-COPY wheels /app/wheels
-COPY requirements.txt .
-RUN pip install --no-index --find-links=/app/wheels -r requirements.txt
-
-
-# Копирование приложения
-COPY . .
+# Копируем только необходимые файлы из первого этапа
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+# Копируем только необходимые файлы приложения
+COPY app/ ./app/
+COPY *.py ./
+COPY requirements.txt ./
 
 # Делаем скрипты исполняемыми
 RUN chmod +x *.py

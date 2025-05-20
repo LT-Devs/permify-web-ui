@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from .base_view import BaseView
-from app.controllers import SchemaController, RelationshipController, UserController, GroupController, AppController
+from app.controllers import SchemaController, RelationshipController, UserController, GroupController, AppController, RedisController
 
 class PermissionCheckView(BaseView):
     """Представление для проверки разрешений с современным дизайном."""
@@ -13,6 +13,7 @@ class PermissionCheckView(BaseView):
         self.user_controller = UserController()
         self.group_controller = GroupController()
         self.app_controller = AppController()
+        self.redis_controller = RedisController()
     
     def render(self, skip_status_check=False):
         """Отображает интерфейс проверки разрешений."""
@@ -23,8 +24,19 @@ class PermissionCheckView(BaseView):
         
         tenant_id = self.get_tenant_id("permission_check_view")
         
+        # Добавляем кнопку сброса кэша Redis
+        col_cache1, col_cache2 = st.columns([3, 1])
+        with col_cache2:
+            if st.button("🔄 Сбросить кэш Redis", key="reset_redis_cache"):
+                success, message = self.redis_controller.flush_cache()
+                if success:
+                    st.success(f"Кэш Redis успешно сброшен")
+                else:
+                    st.error(f"Ошибка при сбросе кэша: {message}")
+        
         # Получаем список доступных схем
         schema_success, schema_result = self.schema_controller.get_current_schema(tenant_id)
+        schema = schema_result.get("schema", {}) if schema_result else {}
         
         if schema_success:
             # Используем современную карточку для формы проверки
@@ -43,10 +55,9 @@ class PermissionCheckView(BaseView):
                 st.markdown("#### 📦 Сущность")
                 
                 entity_types = []
-                if schema_result:
+                if schema:
                     # Получаем все типы сущностей из схемы
                     try:
-                        schema = schema_result.get("schema", {})
                         entity_definitions = schema.get("entity_definitions", {})
                         
                         entity_types = list(entity_definitions.keys())
@@ -73,7 +84,7 @@ class PermissionCheckView(BaseView):
         
                 # Получаем разрешения для данного типа сущности
                 permissions = []
-                if schema_success and entity_type in entity_types:
+                if schema and entity_type in entity_types:
                     try:
                         entity_def = schema.get("entity_definitions", {}).get(entity_type, {})
                         permission_defs = entity_def.get("permissions", {})
@@ -180,10 +191,20 @@ class PermissionCheckView(BaseView):
         
         tenant_id = self.get_tenant_id("permission_check_view_simplified")
         
+        # Добавляем кнопку сброса кэша Redis
+        col_cache1, col_cache2 = st.columns([3, 1])
+        with col_cache2:
+            if st.button("🔄 Сбросить кэш Redis", key="reset_redis_cache_simplified"):
+                success, message = self.redis_controller.flush_cache()
+                if success:
+                    st.success(f"Кэш Redis успешно сброшен")
+                else:
+                    st.error(f"Ошибка при сбросе кэша: {message}")
+        
         # Получаем данные
-        users = self.user_controller.get_users(tenant_id)
-        groups = self.group_controller.get_groups(tenant_id)
-        apps = self.app_controller.get_apps(tenant_id)
+        users = self.user_controller.get_users(tenant_id) or []
+        groups = self.group_controller.get_groups(tenant_id) or []
+        apps = self.app_controller.get_apps(tenant_id) or []
         
         # Только приложения с экземплярами, не шаблоны
         app_instances = [app for app in apps if not app.get('is_template', False) and app.get('id')]

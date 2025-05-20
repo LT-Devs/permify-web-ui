@@ -5,6 +5,12 @@
       "name": "odo",
       "members": [],
       "app_memberships": []
+    },
+    {
+      "id": "2",
+      "name": "oso",
+      "members": [],
+      "app_memberships": []
     }
   ]
 }

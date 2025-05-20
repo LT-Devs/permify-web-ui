@@ -9,6 +9,7 @@ from .status_view import StatusView
 from .index_view import IndexView
 from .tenant_view import TenantView
 from .integration_view import IntegrationView
+from .cache_view import CacheView
 
 __all__ = [
     'IndexView',

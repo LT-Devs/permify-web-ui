@@ -5,6 +5,12 @@
       "name": "siromatnikov_v.v",
       "groups": [],
       "app_roles": []
+    },
+    {
+      "id": "localadmin",
+      "name": "localadmin",
+      "groups": [],
+      "app_roles": []
     }
   ]
 }

@@ -3,12 +3,24 @@
     {
       "entity": {
         "type": "group",
-        "id": "1"
+        "id": "2"
       },
       "relation": "member",
       "subject": {
         "type": "user",
         "id": "siromatnikov_v.v",
+        "relation": ""
+      }
+    },
+    {
+      "entity": {
+        "type": "dashboard",
+        "id": "dashboard"
+      },
+      "relation": "group_owner",
+      "subject": {
+        "type": "group",
+        "id": "2",
         "relation": ""
       }
     }
