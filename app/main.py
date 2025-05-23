@@ -44,42 +44,10 @@ def check_permify_status():
     
     return status
 
-def initialize_system_on_first_launch():
-    """Инициализирует систему только при первом запуске приложения.
-    
-    Проверяет наличие флага 'app_first_launch' в куках и, если его нет,
-    выполняет пересоздание схем и установку флага, чтобы в будущем
-    не повторять эту операцию.
-    """
-    # Используем куки для хранения информации о первом запуске
-    if 'app_first_launch_completed' not in st.session_state:
-        tenant_id = DEFAULT_TENANT
-        
-        # Показываем сообщение при первой загрузке
-        with st.spinner("Первый запуск приложения. Инициализация схем..."):
-            # Пересоздаем только схемы при первом запуске
-            app_controller = AppController()
-            success_schema, _ = app_controller.force_rebuild_schema(tenant_id)
-            
-            # Очищаем кэш Redis
-            redis_controller = RedisController()
-            redis_controller.flush_cache()
-            
-            # Устанавливаем флаг, чтобы в будущем не повторять инициализацию
-            st.session_state.app_first_launch_completed = True
-            
-            if success_schema:
-                st.success("✅ Схемы успешно инициализированы")
-            else:
-                st.warning("⚠️ Схемы инициализированы с предупреждениями")
-
 def main():
     # Инициализируем сессию
     if 'tenant_id' not in st.session_state:
         st.session_state.tenant_id = DEFAULT_TENANT
-    
-    # Инициализируем систему только при первом запуске
-    initialize_system_on_first_launch()
     
     # Создаем боковое меню с улучшенным дизайном
     with st.sidebar:

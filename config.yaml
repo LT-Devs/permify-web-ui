@@ -1,0 +1,27 @@
+version: 1
+
+server:
+  http:
+    enabled: true
+    port: 3476
+  grpc:
+    enabled: true
+    port: 3478
+
+database:
+  engine: postgres
+  uri: postgres://permuser:sdofjOSDFoSDIJfmsdoD@db:5432/permify_1
+  auto_migrate: true
+  max_open_connections: 20
+  max_idle_connections: 1
+  max_connection_lifetime: 300s
+  max_connection_idle_time: 60s
+  garbage_collection:
+    enabled: true
+    interval: 200h
+    window: 200h
+    timeout: 5m
+
+logger:
+  level: info
+  development: false
